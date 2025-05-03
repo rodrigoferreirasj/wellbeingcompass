@@ -11,7 +11,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription }
 import { ArrowRight, ArrowLeft, CheckCircle, Target, Star, TrendingUp } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
-import { ActionPlan } from './action-plan';
+import { ActionPlan } from './action-plan'; // Assuming ActionPlan is used in 'defineActions' stage now
 import { CategoryScoresDisplay } from './category-scores-display';
 
 interface WellbeingWheelProps {
@@ -263,20 +263,20 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
        const numItems = data.length;
        const angleStep = 360 / numItems;
        // Ensure consistent start angle for label positioning
-       const startAngleOffset = 90 + (angleStep / 2); // Adjusted start: center of first slice at 12 o'clock
+       const startAngleOffset = 90 - (angleStep / 2); // Adjusted start: center of first slice at 12 o'clock
 
        return data.map((entry, index) => {
-            const baseOuterRadius = 80; // Percentage for pie slice edge
-            const labelRadiusMultiplier = 1.25; // Distance for name labels
-
-            // Calculate midAngle based on fixed index
-            const midAngle = startAngleOffset - (index * angleStep); // Center angle for the slice
+            const baseOuterRadius = 100; // Percentage for pie slice edge
+            const labelRadiusMultiplier = isSelectionMode ? 1.15 : 1.25; // Place labels slightly closer in selection mode to avoid overlap with potential ActionPlan
             const outerRadiusValue = baseOuterRadius;
             const labelRadius = outerRadiusValue * labelRadiusMultiplier; // Calculate radius for name label
 
             // Using dummy cx, cy as relative positioning will happen in the render function
             const cx = 50; // Assuming center is 50%
             const cy = 50;
+
+            // Calculate midAngle based on fixed index
+            const midAngle = startAngleOffset - (index * angleStep); // Center angle for the slice
 
             const x = cx + labelRadius * Math.cos(-midAngle * RADIAN);
             const y = cy + labelRadius * Math.sin(-midAngle * RADIAN);
@@ -393,7 +393,7 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
                 {line2 && <tspan x={`${entry.labelX}%`} dy="1.2em">{line2}</tspan>}
              </text>
         );
-    }, []); // No dependencies needed if positions are pre-calculated in pieData
+    }, [isSelectionMode]); // Re-added isSelectionMode dependency to recalculate labelRadiusMultiplier if mode changes
 
 
      // Renders the inner score/check labels
@@ -464,29 +464,30 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
     }
 
   return (
-     <div className="flex flex-col lg:flex-row items-start w-full gap-6 lg:gap-8 px-4"> {/* Main container: row layout on large screens */}
+     <div className="flex flex-col items-start w-full gap-6 px-4"> {/* Main container: Always column */}
 
-        {/* Left Side: Chart Area */}
-        <div className="relative w-full lg:w-[60%] aspect-square mx-auto lg:mx-0"> {/* Chart takes more space */}
+        {/* Chart Area */}
+        <div className="relative w-full max-w-3xl mx-auto aspect-square"> {/* Increased max-width and kept aspect ratio */}
              <ResponsiveContainer width="100%" height="100%">
-                 <PieChart margin={{ top: 50, right: 50, bottom: 50, left: 50 }}> {/* Increased margins for labels */}
+                 {/* Added explicit margin for labels */}
+                 <PieChart margin={{ top: 50, right: 50, bottom: 50, left: 50 }}>
                    {/* Outer Pie for Interaction and Names */}
                    <Pie
                      data={pieData}
                      cx="50%"
                      cy="50%"
                      labelLine={false}
-                     outerRadius="80%" // Keep outer radius
-                     innerRadius="30%" // Keep inner radius
-                     dataKey="value" // Use the 'value: 1' for equal slices
+                     outerRadius="80%" // Reduced outer radius slightly to give labels more space
+                     innerRadius="30%"
+                     dataKey="value"
                      onClick={handlePieClick}
                      animationDuration={500}
                      animationEasing="ease-out"
                      className="cursor-pointer focus:outline-none"
-                     label={renderCustomizedNameLabel} // Outer labels (names)
-                     startAngle={90} // Start at 12 o'clock
-                     endAngle={-270} // Go full circle counter-clockwise
-                     stroke="hsl(var(--background))" // Background color border
+                     label={renderCustomizedNameLabel} // Render outer name labels
+                     startAngle={90}
+                     endAngle={-270}
+                     stroke="hsl(var(--background))"
                      strokeWidth={1}
                    >
                      {pieData.map((entry) => {
@@ -527,7 +528,7 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
                         outerRadius="80%" // Match outer radius
                         innerRadius="30%" // Match inner radius
                         dataKey="value" // Use dummy value
-                        label={renderCustomizedScoreLabel} // Inner labels (scores/checks)
+                        label={renderCustomizedScoreLabel} // Render inner score/check labels
                         startAngle={90} // Match start angle
                         endAngle={-270} // Match end angle
                         isAnimationActive={false} // No animation needed
@@ -555,8 +556,8 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
               </div>
            </div>
 
-         {/* Right Side: Controls and Category Scores */}
-         <div className="w-full lg:w-[40%] flex flex-col gap-6"> {/* Takes remaining width */}
+         {/* Controls & Category Scores Area Below Chart */}
+         <div className="w-full max-w-3xl mx-auto flex flex-col items-center gap-6"> {/* Max width matches chart */}
             {/* Controls Area */}
             <div className="w-full">
                 {/* Scoring Slider Card */}
@@ -599,7 +600,7 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
                     </Card>
                 )}
 
-                {/* Selection Mode Prompt & Action Plan (ActionPlan moved to its own stage) */}
+                {/* Selection Mode Prompt */}
                  {isSelectionMode && (
                     <div className="w-full">
                         <Card className="w-full shadow-sm bg-muted/50 mb-6">
@@ -612,10 +613,7 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
                                  {improvementItems.length >= 3 && isItemSelectedForImprovement(selectedItemId ?? '') && `"${selectedItemDetails?.name}" selecionado. Clique novamente para remover.`}
                             </CardContent>
                         </Card>
-                         {/* Action Plan for the currently selected item (in selection mode only) */}
-                         {selectedItemId && isSelectionMode && (
-                             <ActionPlan selectedItemId={selectedItemId} renderAllSelected={false} />
-                         )}
+                         {/* Action Plan is now handled in a separate stage ('defineActions') */}
                     </div>
                  )}
 
