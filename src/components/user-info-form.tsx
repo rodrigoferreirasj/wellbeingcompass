@@ -9,7 +9,7 @@ import type { UserInfo } from '@/types/assessment';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Card, CardContent, CardFooter } from '@/components/ui/card';
+import { CardContent, CardFooter } from '@/components/ui/card'; // Removed unused Card import
 import { ArrowRight } from 'lucide-react';
 
 const userInfoSchema = z.object({
@@ -20,20 +20,11 @@ const userInfoSchema = z.object({
   phone: z.string().min(10, { message: 'Telefone deve ter pelo menos 10 dígitos.' }).regex(/^\+?[0-9\s\-()]+$/, {message: 'Formato de telefone inválido.'}),
 });
 
-// Temporary placeholder data for development
-const placeholderUserInfo: UserInfo = {
-  fullName: 'Usuário Teste',
-  jobTitle: 'Cargo Teste',
-  company: 'Empresa Teste',
-  email: 'teste@exemplo.com',
-  phone: '0000000000',
-};
-
 export const UserInfoForm: React.FC = () => {
   const { updateUserInfo } = useAssessment();
   const form = useForm<UserInfo>({
     resolver: zodResolver(userInfoSchema),
-    defaultValues: { // Keep default values, but they won't be strictly enforced for submission temporarily
+    defaultValues: { // Standard default values
       fullName: '',
       jobTitle: '',
       company: '',
@@ -42,26 +33,18 @@ export const UserInfoForm: React.FC = () => {
     },
   });
 
-  // Original onSubmit function for when validation is re-enabled
+  // Standard onSubmit function
   const onSubmit = (data: UserInfo) => {
     updateUserInfo(data);
     // Context handles stage transition
   };
 
-  // Temporary function to bypass validation
-  const handleTempSubmit = () => {
-    console.warn("Bypassing user info validation for development.");
-    updateUserInfo(placeholderUserInfo); // Use placeholder data
-    // Context handles stage transition
-  };
-
-
   return (
     <Form {...form}>
-      {/* The form structure remains for eventual re-activation, but submit uses the temporary handler */}
-      <form onSubmit={(e) => { e.preventDefault(); handleTempSubmit(); }} className="space-y-6">
+      {/* Use the standard react-hook-form handleSubmit */}
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         <CardContent className="space-y-4 p-0">
-          <p className="text-sm text-destructive">**Aviso:** Validação temporariamente desativada para desenvolvimento.</p>
+          {/* Removed temporary warning message */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
              <FormField
               control={form.control}
@@ -70,7 +53,8 @@ export const UserInfoForm: React.FC = () => {
                 <FormItem>
                   <FormLabel>Nome Completo</FormLabel>
                   <FormControl>
-                    <Input placeholder="Seu nome completo" {...field} disabled />
+                    {/* Removed disabled prop */}
+                    <Input placeholder="Seu nome completo" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -83,7 +67,8 @@ export const UserInfoForm: React.FC = () => {
                 <FormItem>
                   <FormLabel>Cargo</FormLabel>
                   <FormControl>
-                    <Input placeholder="Seu cargo" {...field} disabled />
+                     {/* Removed disabled prop */}
+                    <Input placeholder="Seu cargo" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -98,7 +83,8 @@ export const UserInfoForm: React.FC = () => {
               <FormItem>
                 <FormLabel>Empresa</FormLabel>
                 <FormControl>
-                  <Input placeholder="Empresa onde trabalha" {...field} disabled />
+                   {/* Removed disabled prop */}
+                  <Input placeholder="Empresa onde trabalha" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -113,7 +99,8 @@ export const UserInfoForm: React.FC = () => {
                 <FormItem>
                   <FormLabel>Email</FormLabel>
                   <FormControl>
-                    <Input type="email" placeholder="seu.email@exemplo.com" {...field} disabled/>
+                     {/* Removed disabled prop */}
+                    <Input type="email" placeholder="seu.email@exemplo.com" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -126,7 +113,8 @@ export const UserInfoForm: React.FC = () => {
                 <FormItem>
                   <FormLabel>Telefone</FormLabel>
                   <FormControl>
-                    <Input type="tel" placeholder="(XX) XXXXX-XXXX" {...field} disabled/>
+                     {/* Removed disabled prop */}
+                    <Input type="tel" placeholder="(XX) XXXXX-XXXX" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -135,9 +123,9 @@ export const UserInfoForm: React.FC = () => {
           </div>
         </CardContent>
         <CardFooter className="flex justify-end p-0">
-           {/* Use the temporary submit handler */}
+           {/* Standard submit button */}
            <Button type="submit">
-            Pular Informações (Temp) <ArrowRight className="ml-2 h-4 w-4" />
+             Próximo <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
         </CardFooter>
       </form>
