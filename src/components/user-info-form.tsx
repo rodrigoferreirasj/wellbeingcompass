@@ -20,31 +20,46 @@ const userInfoSchema = z.object({
   phone: z.string().min(10, { message: 'Telefone deve ter pelo menos 10 dígitos.' }).regex(/^\+?[0-9\s\-()]+$/, {message: 'Formato de telefone inválido.'}),
 });
 
+// Placeholder data for skipping validation
+const placeholderUserInfo: UserInfo = {
+    fullName: 'Test User',
+    jobTitle: 'Tester',
+    company: 'Test Inc.',
+    email: 'test@example.com',
+    phone: '0000000000',
+};
+
+
 export const UserInfoForm: React.FC = () => {
   const { updateUserInfo } = useAssessment();
   const form = useForm<UserInfo>({
     resolver: zodResolver(userInfoSchema),
-    defaultValues: { // Standard default values
-      fullName: '',
-      jobTitle: '',
-      company: '',
-      email: '',
-      phone: '',
-    },
+    // Use placeholder data as default for inputs, but validation is bypassed
+    defaultValues: placeholderUserInfo,
   });
 
-  // Standard onSubmit function
+  // Standard onSubmit function - Not used directly by the button for now
   const onSubmit = (data: UserInfo) => {
     updateUserInfo(data);
     // Context handles stage transition
   };
 
+  // Function to directly proceed with placeholder data
+  const handleNextClick = () => {
+      updateUserInfo(placeholderUserInfo);
+      // updateUserInfo automatically advances the stage
+  };
+
+
   return (
     <Form {...form}>
-      {/* Use the standard react-hook-form handleSubmit */}
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      {/* form tag is still useful for structure, but onSubmit is bypassed */}
+      <form onSubmit={(e) => e.preventDefault()} className="space-y-6">
         <CardContent className="space-y-4 p-0">
-          {/* Removed temporary warning message */}
+          {/* Add a temporary message indicating bypass */}
+           <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-3 rounded-md mb-4" role="alert">
+                <p className="text-sm"><strong>Modo de Teste:</strong> Validação de dados do usuário temporariamente desativada. Clique em "Próximo" para continuar.</p>
+           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
              <FormField
               control={form.control}
@@ -53,7 +68,7 @@ export const UserInfoForm: React.FC = () => {
                 <FormItem>
                   <FormLabel>Nome Completo</FormLabel>
                   <FormControl>
-                    {/* Removed disabled prop */}
+                    {/* Fields are still here but not required for progression */}
                     <Input placeholder="Seu nome completo" {...field} />
                   </FormControl>
                   <FormMessage />
@@ -67,7 +82,6 @@ export const UserInfoForm: React.FC = () => {
                 <FormItem>
                   <FormLabel>Cargo</FormLabel>
                   <FormControl>
-                     {/* Removed disabled prop */}
                     <Input placeholder="Seu cargo" {...field} />
                   </FormControl>
                   <FormMessage />
@@ -83,7 +97,6 @@ export const UserInfoForm: React.FC = () => {
               <FormItem>
                 <FormLabel>Empresa</FormLabel>
                 <FormControl>
-                   {/* Removed disabled prop */}
                   <Input placeholder="Empresa onde trabalha" {...field} />
                 </FormControl>
                 <FormMessage />
@@ -99,7 +112,6 @@ export const UserInfoForm: React.FC = () => {
                 <FormItem>
                   <FormLabel>Email</FormLabel>
                   <FormControl>
-                     {/* Removed disabled prop */}
                     <Input type="email" placeholder="seu.email@exemplo.com" {...field} />
                   </FormControl>
                   <FormMessage />
@@ -113,7 +125,6 @@ export const UserInfoForm: React.FC = () => {
                 <FormItem>
                   <FormLabel>Telefone</FormLabel>
                   <FormControl>
-                     {/* Removed disabled prop */}
                     <Input type="tel" placeholder="(XX) XXXXX-XXXX" {...field} />
                   </FormControl>
                   <FormMessage />
@@ -123,8 +134,8 @@ export const UserInfoForm: React.FC = () => {
           </div>
         </CardContent>
         <CardFooter className="flex justify-end p-0">
-           {/* Standard submit button */}
-           <Button type="submit">
+           {/* Button now directly calls handleNextClick, bypassing form submission */}
+           <Button type="button" onClick={handleNextClick}>
              Próximo <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
         </CardFooter>
