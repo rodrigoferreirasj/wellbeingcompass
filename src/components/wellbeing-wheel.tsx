@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { PieChart, Pie, Cell, Tooltip, Label, ResponsiveContainer } from 'recharts';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'; // Removed Label import
 import { useAssessment } from '@/context/AssessmentContext';
 import { wellbeingItems, wellbeingCategories, ItemScore, getCategoryForItem, getItemDetails, WellbeingItem } from '@/types/assessment';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,8 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription }
 import { ArrowRight, ArrowLeft, CheckCircle, Target, Star, Minus, Plus, TrendingUp } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
-import { ActionPlan } from './action-plan'; // Import ActionPlan
+import { ActionPlan } from './action-plan';
+import { CategoryScoresDisplay } from './category-scores-display'; // Import the new component
 
 interface WellbeingWheelProps {
   scoreType: 'current' | 'desired' | 'select';
@@ -78,11 +79,16 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
     if (selectedItemData && !isSelectionMode) {
       const scoreKey = scoreType === 'current' ? 'currentScore' : 'desiredScore';
       setSliderValue(selectedItemData[scoreKey] ?? 5); // Default to 5 if score is null
-    } else if (!isSelectionMode) {
+    } else if (isSelectionMode) {
+      // In selection mode, keep selectedItemId if it's still in improvementItems
+       if (selectedItemId && !isItemSelectedForImprovement(selectedItemId)) {
+           setSelectedItemId(null); // Deselect if removed from improvement list
+       }
+    } else if (!isSelectionMode && !selectedItemId) {
         // If no item is selected in scoring mode, reset slider (optional)
-        // setSliderValue(5);
+         setSliderValue(5);
     }
-  }, [selectedItemData, scoreType, isSelectionMode]);
+  }, [selectedItemData, scoreType, isSelectionMode, selectedItemId, isItemSelectedForImprovement]);
 
 
   const handlePieClick = useCallback((entry: PieDataItem) => {
@@ -211,6 +217,7 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
 
         return {
           ...itemScoreData,
+          itemId: item.id, // Ensure itemId is correctly passed
           name: item.name,
           categoryName: category?.name ?? 'Unknown',
           categoryColor: categoryColor,
@@ -248,24 +255,30 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
     }
    }, [isSelectionMode, improvementItems, itemScores, scoreType]);
 
-   // Custom Tooltip Component
+   // Custom Tooltip Component - Fixed to use correct data item
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
+      // payload[0].payload corresponds to the specific PieDataItem for the hovered segment
       const data = payload[0].payload as PieDataItem;
+      const itemDetails = getItemDetails(data.itemId); // Get full item details
+
+      // Recalculate difference here for tooltip consistency if needed
+       const difference = data.currentScore !== null && data.desiredScore !== null ? data.desiredScore - data.currentScore : null;
 
       return (
         <div className="bg-background border border-border rounded-md shadow-lg p-3 text-sm max-w-xs">
           <p className="font-semibold text-primary">{data.name} <span className="text-xs text-muted-foreground">({data.categoryName})</span></p>
-          {getItemDetails(data.itemId)?.description && <p className="text-muted-foreground text-xs mt-1">{getItemDetails(data.itemId)?.description}</p>}
+           {/* Use description from itemDetails */}
+          {itemDetails?.description && <p className="text-muted-foreground text-xs mt-1">{itemDetails.description}</p>}
 
           <div className="mt-2 space-y-1">
               {data.currentScore !== null && <p>Atual: <span className="font-medium">{data.currentScore}</span></p>}
               {data.desiredScore !== null && <p>Desejado: <span className="font-medium">{data.desiredScore}</span></p>}
-               {/* Always show difference if both scores exist, regardless of mode */}
-              {data.currentScore !== null && data.desiredScore !== null && data.difference !== null && (
-                 <p className={cn("flex items-center", data.difference > 0 ? "text-green-600" : data.difference < 0 ? "text-red-600" : "text-muted-foreground")}>
-                     Diferença: <span className="font-medium ml-1">{data.difference > 0 ? '+' : ''}{data.difference}</span>
-                     {data.difference !== 0 && <TrendingUp className="w-3 h-3 ml-1"/>}
+               {/* Show difference calculated within the tooltip */}
+              {difference !== null && (
+                 <p className={cn("flex items-center", difference > 0 ? "text-green-600" : difference < 0 ? "text-red-600" : "text-muted-foreground")}>
+                     Diferença: <span className="font-medium ml-1">{difference > 0 ? '+' : ''}{difference}</span>
+                     {difference !== 0 && <TrendingUp className="w-3 h-3 ml-1"/>}
                 </p>
               )}
           </div>
@@ -281,17 +294,17 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
 
    // Custom label rendering function for names OUTSIDE the pie
     const renderCustomizedNameLabel = useCallback(({ cx, cy, midAngle, innerRadius, outerRadius, percent, index, payload }: any) => {
-        const radius = outerRadius * 1.1; // Position labels outside the main radius
+        const radius = outerRadius * 1.15; // Position labels further outside
         const x = cx + radius * Math.cos(-midAngle * RADIAN);
         const y = cy + radius * Math.sin(-midAngle * RADIAN);
         const textAnchor = x > cx ? 'start' : 'end';
-        const name = payload.name; // Use the item name
+        const name = payload.name; // Use the item name from the payload
 
         // Basic line splitting for longer names
         const nameParts = name.split(' ');
-        const line1 = nameParts.slice(0, Math.ceil(nameParts.length / 2)).join(' ');
-        const line2 = nameParts.slice(Math.ceil(nameParts.length / 2)).join(' ');
-
+        // Simple split: first word on line 1, rest on line 2, or handle single word
+        const line1 = nameParts[0];
+        const line2 = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
 
         return (
             <text
@@ -300,37 +313,38 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
                 fill="hsl(var(--foreground))" // Use theme foreground color
                 textAnchor={textAnchor}
                 dominantBaseline="central"
-                className="text-[10px] sm:text-[11px] pointer-events-none" // Adjust size as needed
+                className="text-[11px] sm:text-xs pointer-events-none" // Slightly larger, adjust as needed
                  style={{ fontWeight: 500 }} // Slightly bolder
             >
-                 <tspan x={x} dy={line2 ? "-0.3em" : "0"}>{line1}</tspan>
-                {line2 && <tspan x={x} dy="1.2em">{line2}</tspan>}
+                 <tspan x={x} dy={line2 ? "-0.5em" : "0"}>{line1}</tspan>
+                 {line2 && <tspan x={x} dy="1.2em">{line2}</tspan>}
             </text>
         );
-    }, []);
+    }, []); // No dependencies needed if RADIAN is constant
 
      // Custom label rendering function for scores/checkmarks INSIDE the pie
      const renderCustomizedScoreLabel = useCallback(({ cx, cy, midAngle, innerRadius, outerRadius, percent, index, payload }: any) => {
-         const entry = pieData[index]; // Get the data for this segment
+         const entry = payload as PieDataItem; // Cast payload to PieDataItem
          if (!entry || entry.label === '') return null; // Don't render if label is empty
 
-         const radius = innerRadius + (outerRadius - innerRadius) * 0.5; // Position inside segment
+         const radius = innerRadius + (outerRadius - innerRadius) * 0.55; // Adjust position inside segment
          const x = cx + radius * Math.cos(-midAngle * RADIAN);
          const y = cy + radius * Math.sin(-midAngle * RADIAN);
          const isCheckmark = isSelectionMode && entry.label === '✓';
-         const isDifference = isSelectionMode && entry.label.match(/^[-+]\d+$/); // Check if label is a difference like "+2" or "-1"
+          // Use the difference calculated in pieData for consistency
+         const difference = entry.difference;
+         const isDifferenceLabel = isSelectionMode && difference !== null && entry.label === (difference > 0 ? `+${difference}` : difference.toString());
 
          let fillColor = "hsl(var(--primary-foreground))"; // Default white
          let fontWeight: string | number = 'bold';
-         let fontSize = isCheckmark ? 18 : 14; // Checkmark larger
+         let fontSize = isCheckmark ? 20 : 16; // Checkmark larger
 
          // Style difference numbers
-         if (isDifference) {
-             const diffValue = parseInt(entry.label, 10);
-             if (diffValue > 0) fillColor = 'hsl(142 71% 90%)'; // Light green text
-             else if (diffValue < 0) fillColor = 'hsl(0 84% 90%)'; // Light red text
+         if (isDifferenceLabel && difference !== null) {
+             if (difference > 0) fillColor = 'hsl(142 71% 90%)'; // Light green text
+             else if (difference < 0) fillColor = 'hsl(0 84% 90%)'; // Light red text
              else fillColor = 'hsl(var(--muted-foreground))'; // Muted for zero difference
-             fontSize = 13; // Slightly smaller for difference
+             fontSize = 14; // Slightly smaller for difference
              fontWeight = 600;
          }
 
@@ -349,7 +363,7 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
              {entry.label}
          </text>
          );
-     }, [pieData, isSelectionMode]); // Depend on pieData and isSelectionMode
+     }, [isSelectionMode]); // Depend on isSelectionMode
 
 
   // Render function
@@ -359,184 +373,202 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
     }
 
   return (
-    <div className="flex flex-col lg:flex-row items-start w-full gap-8">
-      {/* Left Side: Wheel and Controls */}
-      <div className="w-full lg:w-1/2 flex flex-col items-center">
-       {/* Scoring Slider Card (only in scoring modes and when an item is selected) */}
-       {selectedItemId && !isSelectionMode && (
-           <Card className="w-full max-w-md mb-6 shadow-md transition-all duration-300 ease-out animate-in fade-in slide-in-from-top-10">
-               <CardHeader>
-                  <CardTitle className="text-lg text-center">Avaliar: <span className="text-primary">{selectedItemDetails?.name}</span></CardTitle>
-                   <CardDescription className="text-center">
-                     {scoreType === 'current' ? 'Qual sua satisfação atual (1-10)?' : 'Qual nota você deseja alcançar (1-10)?'}
-                     {/* Show current score for reference in desired mode */}
-                     {scoreType === 'desired' && selectedItemData?.currentScore !== null && ` (Atual: ${selectedItemData.currentScore})`}
-                   </CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-col items-center px-6 pb-4">
-                 <Slider
-                    min={1}
-                    max={10}
-                    step={1}
-                    value={[sliderValue]}
-                    onValueChange={handleSliderChange}
-                    className="w-full"
-                    aria-label={`Score for ${selectedItemDetails?.name}`}
-                 />
-                 {/* Show score and difference */}
-                 <div className="mt-2 flex items-center gap-2">
-                     <span className="text-2xl font-bold text-primary">{sliderValue}</span>
-                     {scoreType === 'desired' && selectedItemData?.currentScore !== null && (
-                        <span className={cn("text-sm font-medium flex items-center",
-                             (sliderValue - selectedItemData.currentScore) > 0 ? "text-green-600" :
-                             (sliderValue - selectedItemData.currentScore) < 0 ? "text-red-600" :
-                             "text-muted-foreground")}>
-                              ({sliderValue - selectedItemData.currentScore >= 0 ? '+' : ''}{sliderValue - selectedItemData.currentScore}) {/* Always show sign */}
-                             {sliderValue - selectedItemData.currentScore !== 0 && <TrendingUp className="w-4 h-4 ml-1"/>}
-                        </span>
-                     )}
-                 </div>
-              </CardContent>
-              <CardFooter className="flex justify-center gap-4 pb-4">
-                 <Button variant="outline" onClick={() => setSelectedItemId(null)}>Cancelar</Button>
-                 <Button onClick={confirmScore}>Confirmar Nota</Button>
-              </CardFooter>
-           </Card>
-       )}
+     // Main container using grid for better layout control
+     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full">
 
-        {/* Placeholder for when no item is selected for scoring/selection prompt */}
-        {/* Adjust height based on card height or make it dynamic */}
-        {!selectedItemId && !isSelectionMode && (
-           <div className="h-[244px] flex items-center justify-center text-center text-muted-foreground mb-6 px-4">
-              Clique em um item do gráfico para definir a pontuação {scoreType === 'current' ? 'atual' : 'desejada'}.
-              {scoreType === 'desired' && ' A nota atual será exibida para referência.'}
-           </div>
-       )}
-       {isSelectionMode && !selectedItemId && (
-           <div className="h-[244px] flex items-center justify-center text-center text-muted-foreground mb-6 px-4">
-               Clique nos itens que deseja melhorar (máx. 3). O plano de ação aparecerá ao lado.
-           </div>
-       )}
+       {/* Left Column: Slider/Prompt and Category Scores */}
+       <div className="lg:col-span-1 flex flex-col gap-6 order-2 lg:order-1">
+          {/* Scoring Slider Card (only in scoring modes and when an item is selected) */}
+          {selectedItemId && !isSelectionMode && (
+              <Card className="w-full shadow-md transition-all duration-300 ease-out animate-in fade-in slide-in-from-top-10">
+                  <CardHeader>
+                     <CardTitle className="text-lg text-center">Avaliar: <span className="text-primary">{selectedItemDetails?.name}</span></CardTitle>
+                      <CardDescription className="text-center">
+                        {scoreType === 'current' ? 'Qual sua satisfação atual (1-10)?' : 'Qual nota você deseja alcançar (1-10)?'}
+                        {/* Show current score for reference in desired mode */}
+                        {scoreType === 'desired' && selectedItemData?.currentScore !== null && ` (Atual: ${selectedItemData.currentScore})`}
+                      </CardDescription>
+                 </CardHeader>
+                 <CardContent className="flex flex-col items-center px-6 pb-4">
+                    <Slider
+                       min={1}
+                       max={10}
+                       step={1}
+                       value={[sliderValue]}
+                       onValueChange={handleSliderChange}
+                       className="w-full"
+                       aria-label={`Score for ${selectedItemDetails?.name}`}
+                    />
+                    {/* Show score and difference */}
+                    <div className="mt-3 flex items-center gap-2">
+                        <span className="text-3xl font-bold text-primary">{sliderValue}</span>
+                        {scoreType === 'desired' && selectedItemData?.currentScore !== null && (
+                           <span className={cn("text-base font-medium flex items-center",
+                                (sliderValue - selectedItemData.currentScore) > 0 ? "text-green-600" :
+                                (sliderValue - selectedItemData.currentScore) < 0 ? "text-red-600" :
+                                "text-muted-foreground")}>
+                                 ({sliderValue - selectedItemData.currentScore >= 0 ? '+' : ''}{sliderValue - selectedItemData.currentScore}) {/* Always show sign */}
+                                {sliderValue - selectedItemData.currentScore !== 0 && <TrendingUp className="w-4 h-4 ml-1"/>}
+                           </span>
+                        )}
+                    </div>
+                 </CardContent>
+                 <CardFooter className="flex justify-center gap-4 pb-4">
+                    <Button variant="outline" size="sm" onClick={() => setSelectedItemId(null)}>Cancelar</Button>
+                    <Button size="sm" onClick={confirmScore}>Confirmar Nota</Button>
+                 </CardFooter>
+              </Card>
+          )}
+
+           {/* Placeholder/Prompt Card */}
+           {!selectedItemId && (
+             <Card className="w-full shadow-sm bg-muted/50">
+               <CardContent className="pt-6 pb-6 text-center text-muted-foreground">
+                 {isSelectionMode
+                   ? "Clique nos itens do gráfico que deseja melhorar (máx. 3)."
+                   : `Clique em um item do gráfico para definir a pontuação ${scoreType === 'current' ? 'atual' : 'desejada'}. ${scoreType === 'desired' ? ' A nota atual será exibida para referência.' : ''}`
+                 }
+               </CardContent>
+             </Card>
+           )}
+
+           {/* Category Scores Display */}
+           <CategoryScoresDisplay scoreType={scoreType} />
+
+           {/* Action Plan Area (only in select mode) - Moved below chart */}
+           {isSelectionMode && (
+              <div className="mt-4 lg:hidden"> {/* Show only on smaller screens here */}
+                <h3 className="text-xl font-semibold mb-4 text-center text-primary">
+                    Plano de Ação
+                </h3>
+                {selectedItemId ? (
+                    <ActionPlan selectedItemId={selectedItemId} />
+                ) : (
+                    <div className="h-full flex items-center justify-center text-center text-muted-foreground p-8 border rounded-lg bg-muted/50">
+                        <p>Selecione um item no gráfico para definir ou visualizar o plano de ação.</p>
+                    </div>
+                )}
+              </div>
+           )}
+
+        </div>
 
 
-      {/* Pie Chart */}
-      <div className="relative w-full max-w-lg aspect-square mx-auto mt-4">
-          <ResponsiveContainer width="100%" height="100%">
-               {/* Adjusted margin for external labels */}
-              <PieChart margin={{ top: 40, right: 40, bottom: 40, left: 40 }}>
-                <Pie
-                  data={pieData}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  outerRadius="70%" // Adjust radius to make space for name labels
-                  innerRadius="30%"
-                  dataKey="value"
-                  onClick={(_, index) => handlePieClick(pieData[index])}
-                  animationDuration={500}
-                  animationEasing="ease-out"
-                  className="cursor-pointer focus:outline-none"
-                  label={renderCustomizedNameLabel} // Render names outside
-                  startAngle={90} // Start at the top
-                  endAngle={-270} // Go clockwise
-                >
-                  {pieData.map((entry, index) => {
-                    const isSelected = selectedItemId === entry.itemId;
-                    const scoreKey = scoreType === 'current' ? 'currentScore' : scoreType === 'desired' ? 'desiredScore' : '';
-
-                    return (
-                      <Cell
-                        key={`cell-${index}`}
-                        fill={entry.fillColor}
-                        stroke={isSelected ? 'hsl(var(--ring))' : 'hsl(var(--background))'}
-                        strokeWidth={isSelected ? 3 : 1}
-                        className="focus:outline-none transition-all duration-300 hover:opacity-80"
-                        tabIndex={0}
-                        aria-label={`${entry.name}: ${isSelectionMode ? (isItemSelectedForImprovement(entry.itemId) ? 'Selecionado' : 'Clique para selecionar') : (scoreKey && entry[scoreKey] !== null ? entry[scoreKey] : 'Não avaliado')}`}
-
-                      />
-                    );
-                  })}
-                </Pie>
-                 {/* Second Pie layer for internal score/check labels */}
-                 <Pie
+        {/* Center Column: Pie Chart and Navigation */}
+        <div className="lg:col-span-1 flex flex-col items-center order-1 lg:order-2">
+          {/* Pie Chart - Increased Size */}
+          <div className="relative w-full max-w-xl aspect-square mx-auto"> {/* Increased max-width */}
+             <ResponsiveContainer width="100%" height="100%">
+                 <PieChart margin={{ top: 50, right: 50, bottom: 50, left: 50 }}> {/* Increased margins */}
+                   <Pie
                      data={pieData}
                      cx="50%"
                      cy="50%"
                      labelLine={false}
-                     outerRadius="70%" // Match the outer radius of the first pie
-                     innerRadius="30%" // Match the inner radius of the first pie
+                     outerRadius="75%" // Increased outer radius
+                     innerRadius="30%" // Keep inner radius reasonable
                      dataKey="value"
-                     label={renderCustomizedScoreLabel} // Render scores/checks inside
-                     startAngle={90} // Match start angle
-                     endAngle={-270} // Match end angle
-                     isAnimationActive={false} // No animation for the label layer
-                     className="pointer-events-none" // Don't interact with this layer
-                 >
-                     {/* Render transparent cells so labels have context */}
-                     {pieData.map((entry, index) => (
-                         <Cell key={`label-cell-${index}`} fill="transparent" stroke="none" />
-                     ))}
-                 </Pie>
+                     onClick={(_, index) => handlePieClick(pieData[index])}
+                     animationDuration={500}
+                     animationEasing="ease-out"
+                     className="cursor-pointer focus:outline-none"
+                     label={renderCustomizedNameLabel} // Render names outside
+                     startAngle={90} // Start at the top
+                     endAngle={-270} // Go clockwise
+                   >
+                     {pieData.map((entry, index) => {
+                       const isSelected = selectedItemId === entry.itemId;
+                       const scoreKey = scoreType === 'current' ? 'currentScore' : scoreType === 'desired' ? 'desiredScore' : '';
 
-                <Tooltip content={<CustomTooltip />} cursor={{ fill: 'hsla(var(--muted), 0.3)' }}/>
-              </PieChart>
-          </ResponsiveContainer>
-            {/* Central label - Adjusted position/styling slightly */}
-            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center -mt-4">
-                {scoreType === 'current' && <Target className="w-6 h-6 sm:w-8 sm:h-8 text-primary mb-1"/>}
-                {scoreType === 'desired' && <CheckCircle className="w-6 h-6 sm:w-8 sm:h-8 text-primary mb-1"/>}
-                {scoreType === 'select' && <Star className="w-6 h-6 sm:w-8 sm:h-8 text-primary mb-1"/>}
-               <span className="text-xs sm:text-sm font-medium text-foreground uppercase tracking-wider">
-                   {scoreType === 'current' ? 'Atual' : scoreType === 'desired' ? 'Desejado' : 'Melhorar'}
-               </span>
-            </div>
-        </div>
+                       return (
+                         <Cell
+                           key={`cell-${index}`}
+                           fill={entry.fillColor}
+                           stroke={isSelected ? 'hsl(var(--ring))' : 'hsl(var(--background))'}
+                           strokeWidth={isSelected ? 3 : 1}
+                           className="focus:outline-none transition-all duration-300 hover:opacity-80"
+                           tabIndex={0}
+                           // Ensure payload is passed correctly for tooltip
+                            payload={entry} // Pass the entry data as payload
+                           aria-label={`${entry.name}: ${isSelectionMode ? (isItemSelectedForImprovement(entry.itemId) ? 'Selecionado' : 'Clique para selecionar') : (scoreKey && entry[scoreKey] !== null ? entry[scoreKey] : 'Não avaliado')}`}
+                         />
+                       );
+                     })}
+                   </Pie>
+                    {/* Second Pie layer for internal score/check labels */}
+                    <Pie
+                        data={pieData}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        outerRadius="75%" // Match the outer radius
+                        innerRadius="30%" // Match the inner radius
+                        dataKey="value"
+                        label={renderCustomizedScoreLabel} // Render scores/checks inside
+                        startAngle={90} // Match start angle
+                        endAngle={-270} // Match end angle
+                        isAnimationActive={false} // No animation for the label layer
+                        className="pointer-events-none" // Don't interact with this layer
+                    >
+                        {/* Render transparent cells so labels have context */}
+                        {pieData.map((entry, index) => (
+                            <Cell key={`label-cell-${index}`} fill="transparent" stroke="none" />
+                        ))}
+                    </Pie>
 
-        {/* Navigation Buttons */}
-        <div className="mt-8 flex justify-between w-full max-w-lg">
-          <Button variant="outline" onClick={() => goToStage(prevStage)}>
-            <ArrowLeft className="mr-2 h-4 w-4" /> Voltar
-          </Button>
-          <Button onClick={() => goToStage(nextStage)} disabled={isNextDisabled}>
-             Próximo <ArrowRight className="ml-2 h-4 w-4" />
-          </Button>
-        </div>
-        {isNextDisabled && !isSelectionMode && (
-            <p className="text-xs text-destructive text-center mt-2 max-w-lg">
-                Por favor, avalie todos os itens antes de prosseguir.
-            </p>
-        )}
-        {isNextDisabled && isSelectionMode && (
-             <p className="text-xs text-destructive text-center mt-2 max-w-lg">
-                Selecione pelo menos um item para melhorar antes de prosseguir.
-            </p>
-        )}
-      </div>
-
-      {/* Right Side: Action Plan (only in select mode and when an item is selected) */}
-      {isSelectionMode && (
-        <div className="w-full lg:w-1/2 mt-8 lg:mt-0">
-           {selectedItemId ? (
-               <>
-                   <h3 className="text-xl font-semibold mb-4 text-center text-primary">
-                       Plano de Ação para: {selectedItemDetails?.name}
-                   </h3>
-                    {/* Pass only the relevant improvement item to ActionPlan */}
-                    <ActionPlan selectedItemId={selectedItemId} />
-               </>
-           ) : (
-               <div className="h-full flex items-center justify-center text-center text-muted-foreground p-8 border rounded-lg bg-muted/50">
-                   <p>Selecione um item no gráfico para definir ou visualizar o plano de ação.</p>
+                   <Tooltip content={<CustomTooltip />} cursor={{ fill: 'hsla(var(--muted), 0.3)' }}/>
+                 </PieChart>
+             </ResponsiveContainer>
+               {/* Central label */}
+               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center -mt-4">
+                   {scoreType === 'current' && <Target className="w-8 h-8 sm:w-10 sm:h-10 text-primary mb-1"/>}
+                   {scoreType === 'desired' && <CheckCircle className="w-8 h-8 sm:w-10 sm:h-10 text-primary mb-1"/>}
+                   {scoreType === 'select' && <Star className="w-8 h-8 sm:w-10 sm:h-10 text-primary mb-1"/>}
+                  <span className="text-sm sm:text-base font-medium text-foreground uppercase tracking-wider mt-1">
+                      {scoreType === 'current' ? 'Atual' : scoreType === 'desired' ? 'Desejado' : 'Melhorar'}
+                  </span>
                </div>
+           </div>
+
+           {/* Navigation Buttons */}
+           <div className="mt-8 flex justify-between w-full max-w-lg">
+             <Button variant="outline" onClick={() => goToStage(prevStage)}>
+               <ArrowLeft className="mr-2 h-4 w-4" /> Voltar
+             </Button>
+             {/* Corrected usage of isNextDisabled */}
+             <Button onClick={() => goToStage(nextStage)} disabled={isNextDisabled}>
+                Próximo <ArrowRight className="ml-2 h-4 w-4" />
+             </Button>
+           </div>
+            {/* Corrected usage of isNextDisabled */}
+           {isNextDisabled && !isSelectionMode && (
+               <p className="text-xs text-destructive text-center mt-2 max-w-lg">
+                   Por favor, avalie todos os itens antes de prosseguir.
+               </p>
+           )}
+           {isNextDisabled && isSelectionMode && (
+                <p className="text-xs text-destructive text-center mt-2 max-w-lg">
+                   Selecione pelo menos um item para melhorar antes de prosseguir.
+               </p>
            )}
         </div>
-      )}
-    </div>
-  );
-};
 
-// Helper to get score key
-const scoreKey = (type: 'current' | 'desired'): 'currentScore' | 'desiredScore' => {
-    return type === 'current' ? 'currentScore' : 'desiredScore';
-}
+
+       {/* Right Column: Action Plan (only in select mode, shown on larger screens) */}
+       {isSelectionMode && (
+          <div className="lg:col-span-1 hidden lg:flex lg:flex-col order-3">
+                <h3 className="text-xl font-semibold mb-4 text-center text-primary">
+                    Plano de Ação
+                </h3>
+              {selectedItemId ? (
+                   <ActionPlan selectedItemId={selectedItemId} />
+              ) : (
+                  <div className="h-full flex items-center justify-center text-center text-muted-foreground p-8 border rounded-lg bg-muted/50">
+                      <p>Selecione um item no gráfico para definir ou visualizar o plano de ação.</p>
+                  </div>
+              )}
+          </div>
+       )}
+     </div>
+   );
+};

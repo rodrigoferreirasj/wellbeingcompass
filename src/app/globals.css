@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -41,6 +42,9 @@ body {
     --sidebar-accent-foreground: 240 5.9% 10%;
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 217.2 91.2% 59.8%;
+
+    /* Custom property for progress bar color */
+    --progress-color: hsl(var(--primary));
   }
   .dark {
     --background: 0 0% 3.9%; /* Near Black */
@@ -75,6 +79,9 @@ body {
     --sidebar-accent-foreground: 240 4.8% 95.9%;
     --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
+
+     /* Custom property for progress bar color in dark mode */
+    --progress-color: hsl(var(--primary));
   }
 }
 
@@ -84,5 +91,9 @@ body {
   }
   body {
     @apply bg-background text-foreground;
+  }
+   /* Apply the custom progress color variable */
+  .progress-indicator-custom {
+    background-color: var(--progress-color, hsl(var(--primary)));
   }
 }

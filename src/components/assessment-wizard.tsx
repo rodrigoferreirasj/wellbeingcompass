@@ -21,7 +21,8 @@ export const AssessmentWizard: React.FC = () => {
     currentScore: <WellbeingWheel scoreType="current" />,
     desiredScore: <WellbeingWheel scoreType="desired" />,
     selectItems: <WellbeingWheel scoreType="select" />, // Changed from selectAreas
-    defineActions: <ActionPlan />, // ActionPlan component needs updates to handle items
+    // defineActions now renders ActionPlan directly, showing all selected items
+    defineActions: <ActionPlan renderAllSelected={true} />,
     summary: <SummaryDisplay />, // SummaryDisplay component needs updates
   };
 
@@ -30,18 +31,18 @@ export const AssessmentWizard: React.FC = () => {
     userInfo: 'Informações Pessoais',
     currentScore: 'Avalie seu Bem-Estar Atual (por Item)',
     desiredScore: 'Defina seu Bem-Estar Desejado (por Item)',
-    selectItems: 'Selecione Itens para Melhorar', // Changed
-    defineActions: 'Defina seu Plano de Ação (por Item)', // Changed
+    selectItems: 'Selecione Itens e Defina Ações', // Combined selection and initial action view
+    defineActions: 'Revise e Complete seu Plano de Ação', // Changed
     summary: 'Resumo da Avaliação',
   };
 
    // Update descriptions
    const stageDescriptions: { [key in typeof stage]: string } = {
     userInfo: 'Por favor, preencha suas informações para começar.',
-    currentScore: `Clique em cada item da Roda do Bem-Estar para dar uma nota de 1 a 10 para sua satisfação atual.`,
-    desiredScore: `Agora, clique novamente em cada item para indicar a nota que você deseja alcançar (1 a 10). Veja a nota atual para referência.`,
-    selectItems: `Selecione até 3 itens nos quais você gostaria de focar para melhorar. Clique nos itens desejados.`, // Changed
-    defineActions: 'Para cada item selecionado, defina até 3 ações específicas e datas para concluí-las.', // Changed
+    currentScore: `Clique em cada item da Roda do Bem-Estar para dar uma nota de 1 a 10 para sua satisfação atual. Veja as médias por categoria ao lado.`,
+    desiredScore: `Agora, clique novamente em cada item para indicar a nota que você deseja alcançar (1 a 10). Veja a nota atual para referência e as médias desejadas ao lado.`,
+    selectItems: `Selecione até 3 itens para melhorar clicando no gráfico. Defina ações para o item selecionado ao lado (ou abaixo em telas menores).`, // Changed
+    defineActions: 'Revise todas as ações para os itens selecionados. Certifique-se de que cada ação tenha uma descrição e uma data de conclusão.', // Changed
     summary: 'Revise sua avaliação e plano de ação. Você pode imprimir esta página.',
   };
 
@@ -51,22 +52,23 @@ export const AssessmentWizard: React.FC = () => {
     currentScore: 17,
     desiredScore: 34,
     selectItems: 51, // Changed
-    defineActions: 68,
+    defineActions: 68, // Keep as is for now
     summary: 100,
   };
 
   const currentStageProgress = stageProgress[stage];
 
   return (
-    <Card className="w-full max-w-5xl shadow-lg"> {/* Increased max-width */}
+    // Increased max-width further for the 3-column layout potential
+    <Card className="w-full max-w-7xl shadow-lg">
        <CardHeader>
-         <div className="flex justify-between items-start mb-4">
-           <div>
+         <div className="flex flex-col sm:flex-row justify-between items-start mb-4 gap-4">
+           <div className="flex-1">
               <CardTitle className="text-2xl font-bold text-primary">{stageTitles[stage]}</CardTitle>
               <CardDescription className="text-muted-foreground mt-1">{stageDescriptions[stage]}</CardDescription>
             </div>
             {stage !== 'userInfo' && stage !== 'summary' && (
-                 <div className="text-sm text-muted-foreground whitespace-nowrap">
+                 <div className="text-sm text-muted-foreground whitespace-nowrap pt-1">
                     Progresso: {Math.round(currentStageProgress)}%
                 </div>
              )}
@@ -76,7 +78,8 @@ export const AssessmentWizard: React.FC = () => {
          )}
 
       </CardHeader>
-      <CardContent>
+       {/* Reduced padding for content area to maximize space */}
+      <CardContent className="p-4 md:p-6">
         {stageComponents[stage]}
       </CardContent>
     </Card>

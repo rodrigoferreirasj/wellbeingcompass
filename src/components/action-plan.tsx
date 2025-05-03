@@ -100,18 +100,12 @@ export const ActionPlan: React.FC<ActionPlanProps> = ({ selectedItemId, renderAl
 
         return (
           <Card key={improvementItem.itemId} className="overflow-hidden shadow-sm">
-              {!renderAllSelected && ( // Show header only if rendering single item (not in defineActions stage)
-                  <CardHeader className="bg-muted/50 p-4">
-                      <CardTitle className="text-lg text-primary">{itemDetails?.name}</CardTitle>
-                      {categoryDetails && <CardDescription>{categoryDetails.name}</CardDescription>}
-                  </CardHeader>
-              )}
-              {renderAllSelected && ( // Use a simpler header in defineActions stage
-                   <div className="px-6 py-3 bg-muted/50 border-b">
-                       <span className="text-lg font-semibold text-primary">{itemDetails?.name}</span>
-                       {categoryDetails && <span className="text-sm text-muted-foreground ml-2">({categoryDetails.name})</span>}
-                   </div>
-               )}
+              {/* Header adjusted: Always show simple header for clarity */}
+              <CardHeader className="bg-muted/50 p-4 border-b">
+                  <CardTitle className="text-lg text-primary">{itemDetails?.name}</CardTitle>
+                  {categoryDetails && <CardDescription>{categoryDetails.name}</CardDescription>}
+              </CardHeader>
+
 
             <CardContent className="p-4 md:p-6 space-y-4">
               {actions.map((action, index) => {
@@ -161,7 +155,7 @@ export const ActionPlan: React.FC<ActionPlanProps> = ({ selectedItemId, renderAl
                                 <Trash2 className="h-4 w-4"/>
                            </Button>
                          </div>
-                          {action.text.trim() !== '' && !action.completionDate && (
+                          {action.text.trim() !== '' && !action.completionDate && !renderAllSelected && ( // Show warning only in single-item view
                               <p className="text-xs text-destructive mt-1">Defina uma data de conclusão para esta ação.</p>
                            )}
                      </div>
@@ -177,8 +171,9 @@ export const ActionPlan: React.FC<ActionPlanProps> = ({ selectedItemId, renderAl
        {/* Navigation/Submit buttons - only in defineActions stage */}
        {renderAllSelected && (
            <div className="mt-8 flex justify-between w-full">
+                {/* Go back to Select Items stage */}
                <Button variant="outline" onClick={() => goToStage('selectItems')}>
-                 <ArrowLeft className="mr-2 h-4 w-4" /> Voltar (Seleção)
+                 <ArrowLeft className="mr-2 h-4 w-4" /> Voltar (Seleção/Ações)
                </Button>
                <Button onClick={submitAssessment} disabled={!isPlanComplete()}>
                   Concluir Avaliação <ArrowRight className="ml-2 h-4 w-4" />
