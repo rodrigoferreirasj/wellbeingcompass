@@ -47,9 +47,8 @@ interface PieDataItem extends ItemScore {
 
 const RADIAN = Math.PI / 180;
 const SELECTION_COLOR = 'hsl(var(--destructive))'; // A distinct color for selected items
-const MUTED_BACKGROUND_FILL = 'hsl(var(--muted) / 0.1)'; // Very subtle muted background for unscored/background part
-// const TRANSPARENT_FILL = 'transparent'; // Make unscored sections transparent
-const MUTED_STROKE_COLOR = 'hsl(var(--border))'; // Subtle border for unscored slices
+const MUTED_FILL_COLOR = 'hsl(var(--muted))'; // Initial gray color for slices without scores
+const MUTED_STROKE_COLOR = 'hsl(var(--border))'; // Subtle border for slices
 const ACTIVE_STROKE_COLOR = 'hsl(var(--ring))'; // Ring color for active slice
 const FOREGROUND_TEXT_COLOR = 'hsl(var(--foreground))'; // Default text color for labels
 const MUTED_TEXT_COLOR = 'hsl(var(--muted-foreground))'; // For labels on muted background if needed
@@ -295,14 +294,16 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
          // Ensure payload has the expected structure
          if (!payload || typeof payload !== 'object' || !payload.itemId) {
              // Render a basic, uncolored sector if payload is invalid
-             return <Sector {...props} fill="transparent" stroke={MUTED_STROKE_COLOR} strokeWidth={1} />;
+             return <Sector {...props} fill={MUTED_FILL_COLOR} stroke={MUTED_STROKE_COLOR} strokeWidth={1} />;
          }
 
          // Now we know payload is valid PieDataItem
          const { itemId, displayLabel, categoryColor, isImprovementItem } = payload;
 
-         // Determine the color for the scored portion
-         const scoredFillColor = isImprovementItem ? SELECTION_COLOR : categoryColor;
+         // Determine the color for the scored portion (or the base if no score)
+         let scoredFillColor = isImprovementItem ? SELECTION_COLOR : categoryColor;
+         // Default fill is muted gray if no score
+         let baseFillColor = MUTED_FILL_COLOR;
 
          // Calculate percentage fill (score 1-10)
          const scorePercentage = scoreValue !== null ? (scoreValue / 10) : 0; // Use 0 if score is null
@@ -337,9 +338,6 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
                  strokeColor = SELECTION_COLOR;
                  strokeWidth = 3; // Thicker stroke for selected items
              } else {
-                 // Subtle hover effect in selection mode (optional)
-                  // strokeColor = props.isHovered ? ACTIVE_STROKE_COLOR : MUTED_STROKE_COLOR;
-                  // strokeWidth = props.isHovered ? 2 : 1;
                   strokeColor = MUTED_STROKE_COLOR;
                   strokeWidth = 1;
              }
@@ -353,7 +351,7 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
 
         return (
             <g>
-                 {/* Base Sector Shape (Always present, defines the slice area) */}
+                 {/* Base Sector Shape (Filled with gray if no score, or transparent if score exists) */}
                   <Sector
                     cx={cx}
                     cy={cy}
@@ -361,7 +359,7 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
                     outerRadius={outerRadius}
                     startAngle={startAngle}
                     endAngle={endAngle}
-                    fill="transparent" // Make base transparent
+                    fill={scoreValue === null ? baseFillColor : 'transparent'} // Gray if no score, transparent otherwise
                     stroke={strokeColor} // Use calculated stroke
                     strokeWidth={strokeWidth} // Use calculated width
                   />
@@ -430,13 +428,11 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
                      label={false} // Disable default label rendering from Pie component
                      inactiveShape={(props: any) => renderActiveShape({ ...props, isActive: false })}
                    >
-                    {/* Cells still needed for Recharts internal mapping, but fill is ignored by renderActiveShape */}
+                    {/* Cells still needed for Recharts internal mapping. Fill is now handled by renderActiveShape */}
                      {pieData.map((entry, index) => (
                           <Cell
                            key={`cell-${entry.itemId}`}
-                           fill={entry.categoryColor} // Pass color, renderActiveShape decides final fill
-                           // Make cell transparent by default - renderActiveShape handles the actual fill
-                           // fill="transparent"
+                           fill={MUTED_FILL_COLOR} // Pass base muted color, renderActiveShape decides final fill
                            stroke="none" // No stroke on the cell itself
                            className="focus:outline-none transition-opacity duration-300 hover:opacity-90"
                            tabIndex={-1} // Pie handles focus
@@ -562,11 +558,12 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
             </div>
 
              {/* --- Action Plan Area (only in selectItems stage AFTER items are selected) --- */}
-             {isSelectionMode && improvementItems.length > 0 && (
+             {/* This section is now moved to the 'defineActions' stage */}
+             {/* {isSelectionMode && improvementItems.length > 0 && (
                  <div className="w-full mt-4">
-                    <ActionPlan renderAllSelected={true} /> {/* Always render all selected items here */}
+                    <ActionPlan renderAllSelected={true} />
                  </div>
-             )}
+             )} */}
 
 
             {/* Navigation Buttons */}
@@ -574,10 +571,6 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
                 <Button variant="outline" onClick={() => goToStage(prevStage)}>
                   <ArrowLeft className="mr-2 h-4 w-4" /> Voltar
                 </Button>
-                {/* In selection mode, the "Next" button only appears *after* items are selected */}
-                {/* It should lead to the defineActions stage if that's a separate step */}
-                {/* OR, if actions are defined on this screen, the button's logic changes */}
-                {/* Current setup: Actions defined on *next* screen (defineActions stage) */}
                 <Button onClick={() => goToStage(nextStage)} disabled={isNextDisabled}>
                     Próximo <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
