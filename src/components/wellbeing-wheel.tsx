@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -386,7 +385,7 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
                 textAnchor={entry.labelAnchor}
                 dominantBaseline="central"
                 className="text-[9px] sm:text-[11px] pointer-events-none" // Slightly smaller font
-                style={{ fontWeight: 500 }}
+                style={{ fontWeight: 500, fill: 'hsl(var(--foreground))' }} // Force label color
              >
                 {/* Render tspans for potential multi-line */}
                 <tspan x={`${entry.labelX}%`} dy={line2 ? "-0.6em" : "0"}>{line1}</tspan>
