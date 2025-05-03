@@ -45,7 +45,7 @@ interface AssessmentContextProps {
   removeImprovementItem: (itemId: string) => void;
   updateActionItem: (itemId: string, actionIndex: number, text: string) => void;
   updateActionDate: (itemId: string, actionIndex: number, date: Date | null) => void;
-  removeActionItem: (itemId: string, actionIndex: number) => void;
+  removeActionItem: (itemId: string, actionIndex: number) => void; // For clearing text/date
   goToStage: (stage: AssessmentStage) => void;
   submitAssessment: () => Promise<void>;
   isItemSelectedForImprovement: (itemId: string) => boolean;
@@ -94,6 +94,7 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
       }
       const newItem: ImprovementItem = {
         itemId: itemId,
+        // Initialize with 3 empty action slots
         actions: Array(3).fill(null).map((_, index) => ({ id: `${itemId}-action-${index}-${Date.now()}`, text: '', completionDate: null })),
       };
       toast({ title: `Item "${getItemDetails(itemId)?.name}" selecionado para melhoria.` });
@@ -153,6 +154,7 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
     }));
   }, []);
 
+  // Clears the specific action item's text and date
   const removeActionItem = useCallback((itemId: string, actionIndex: number) => {
        setAssessmentData(prev => ({
         ...prev,
@@ -161,6 +163,7 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
             ? {
                 ...ii,
                 actions: ii.actions.map((action, index) =>
+                  // Reset the specific action to its initial empty state
                   index === actionIndex ? { ...action, text: '', completionDate: null } : action
                 ),
               }
@@ -170,13 +173,13 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
        toast({ title: "Ação Limpa", description: "O texto e a data da ação foram removidos." });
   }, [toast]);
 
+
   const goToStage = useCallback((stage: AssessmentStage) => {
-     // Ensure stage names are correct if they were changed (e.g., 'selectAreas' -> 'selectItems')
-     // const correctedStage = stage === 'selectAreas' ? 'selectItems' : stage;
+     // Stage names should be correct now: 'userInfo', 'currentScore', 'desiredScore', 'selectItems', 'defineActions', 'summary'
      setAssessmentData(prev => ({ ...prev, stage: stage }));
   }, []);
 
-  // Calculates average scores per category
+  // Calculates average scores per category (kept for potential future use)
   const calculateCategoryScores = useCallback((): CategoryScore[] => {
     return wellbeingCategories.map(category => {
       const itemsInCategory = wellbeingItems.filter(item => item.categoryId === category.id);
@@ -198,14 +201,14 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
       return {
         categoryId: category.id,
         categoryName: category.name,
-        categoryColor: category.color, // Include color
-        currentAverage: currentAverage, // Keep raw average
-        desiredAverage: desiredAverage, // Keep raw average
+        categoryColor: category.color,
+        currentAverage: currentAverage,
+        desiredAverage: desiredAverage,
       };
     });
   }, [assessmentData.itemScores]);
 
-  // Calculates percentage scores per category
+  // Calculates percentage scores per category based on total possible score
   const calculateCategoryPercentages = useCallback((): CategoryPercentage[] => {
     return wellbeingCategories.map(category => {
         const itemsInCategory = wellbeingItems.filter(item => item.categoryId === category.id);
@@ -216,26 +219,26 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
         const maxScorePerItem = 10;
         const totalPossibleScore = itemsInCategory.length * maxScorePerItem;
 
-        const validCurrentScores = itemScoresInCategory.map(s => s.currentScore).filter(s => s !== null) as number[];
-        const validDesiredScores = itemScoresInCategory.map(s => s.desiredScore).filter(s => s !== null) as number[];
+        // Filter out null scores and sum them up
+        const currentScores = itemScoresInCategory.map(s => s.currentScore).filter((s): s is number => s !== null);
+        const desiredScores = itemScoresInCategory.map(s => s.desiredScore).filter((s): s is number => s !== null);
 
-        // Calculate sum only if there are valid scores, otherwise sum is 0
-        const currentSum = validCurrentScores.length > 0 ? validCurrentScores.reduce((sum, score) => sum + score, 0) : 0;
-        const desiredSum = validDesiredScores.length > 0 ? validDesiredScores.reduce((sum, score) => sum + score, 0) : 0;
+        const currentSum = currentScores.reduce((sum, score) => sum + score, 0);
+        const desiredSum = desiredScores.reduce((sum, score) => sum + score, 0);
 
-        // Calculate percentage only if total possible score is greater than 0
-        const currentPercentage = totalPossibleScore > 0 && validCurrentScores.length > 0
+        // Calculate percentage only if there are items in the category and scores have been entered
+        const currentPercentage = totalPossibleScore > 0 && currentScores.length > 0
             ? (currentSum / totalPossibleScore) * 100
-            : null;
-        const desiredPercentage = totalPossibleScore > 0 && validDesiredScores.length > 0
-            ? (desiredSum / totalPossibleScore) * 100
-            : null;
+            : null; // Return null if no scores or no items
 
+        const desiredPercentage = totalPossibleScore > 0 && desiredScores.length > 0
+            ? (desiredSum / totalPossibleScore) * 100
+            : null; // Return null if no scores or no items
 
         return {
             categoryId: category.id,
             categoryName: category.name,
-            categoryColor: category.color, // Include color
+            categoryColor: category.color,
             currentPercentage: currentPercentage,
             desiredPercentage: desiredPercentage,
         };
@@ -243,10 +246,10 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
  }, [assessmentData.itemScores]);
 
 
-  // Updated formatAssessmentResults to include percentages
+  // Format results using percentages
   const formatAssessmentResults = useCallback((): string => {
     let resultString = "Resultados da Roda do Bem-Estar:\n\n";
-    const categoryPercentages = calculateCategoryPercentages(); // Get percentages
+    const categoryPercentages = calculateCategoryPercentages();
 
     resultString += "--- Percentuais por Categoria ---\n";
     categoryPercentages.forEach(catPerc => {
@@ -255,19 +258,19 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
         resultString += `  - Percentual Desejado: ${catPerc.desiredPercentage !== null ? catPerc.desiredPercentage.toFixed(0) + '%' : 'N/A'}\n\n`;
     });
 
-    resultString += "--- Pontuações por Item ---\n";
+    resultString += "--- Pontuações Detalhadas por Item ---\n";
     assessmentData.itemScores.forEach(itemScore => {
       const item = getItemDetails(itemScore.itemId);
       const category = item ? getCategoryForItem(item.id) : undefined;
-      resultString += `${item?.name} (${category?.name}):\n`;
+      resultString += `${item?.name} (${category?.name ?? 'N/A'}):\n`;
       resultString += `  - Pontuação Atual: ${itemScore.currentScore ?? 'N/A'}\n`;
       resultString += `  - Pontuação Desejada: ${itemScore.desiredScore ?? 'N/A'}\n`;
       const difference = itemScore.currentScore !== null && itemScore.desiredScore !== null ? itemScore.desiredScore - itemScore.currentScore : null;
-      resultString += `  - Diferença: ${difference !== null ? difference : 'N/A'}\n\n`;
+      resultString += `  - Diferença: ${difference !== null ? (difference > 0 ? '+' : '') + difference : 'N/A'}\n\n`;
     });
 
     return resultString;
-  }, [assessmentData.itemScores, calculateCategoryPercentages]); // Use percentage function
+  }, [assessmentData.itemScores, calculateCategoryPercentages]);
 
 
   const formatActionPlan = useCallback((): string => {
@@ -279,15 +282,23 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
     assessmentData.improvementItems.forEach(impItem => {
       const item = getItemDetails(impItem.itemId);
       const category = item ? getCategoryForItem(item.id) : undefined;
-      planString += `Item: ${item?.name} (${category?.name})\n`;
-      impItem.actions.forEach((action, index) => {
-        if (action.text.trim() !== '' || action.completionDate) {
-            planString += `  Ação ${index + 1}: ${action.text || '(Ação não definida)'}\n`;
-            planString += `    Data de Conclusão: ${action.completionDate ? format(action.completionDate, 'dd/MM/yyyy', { locale: ptBR }) : '(Data não definida)'}\n`;
-        }
-      });
-      planString += "\n";
+       // Filter out actions that are completely empty (no text and no date)
+       const validActions = impItem.actions.filter(a => a.text.trim() !== '' || a.completionDate);
+
+        // Only include the item in the plan if it has valid actions
+        if (validActions.length > 0) {
+            planString += `Item: ${item?.name} (${category?.name ?? 'N/A'})\n`;
+            validActions.forEach((action, index) => {
+                planString += `  Ação ${index + 1}: ${action.text || '(Ação não definida)'}\n`;
+                planString += `    Data de Conclusão: ${action.completionDate ? format(action.completionDate, 'dd/MM/yyyy', { locale: ptBR }) : '(Data não definida)'}\n`;
+            });
+             planString += "\n";
+         }
     });
+     // Handle case where items were selected but no actions were defined
+     if (planString === "Plano de Ação:\n\n") {
+         return "Itens selecionados para melhoria, mas nenhum plano de ação definido.\n";
+     }
     return planString;
   }, [assessmentData.improvementItems]);
 
@@ -299,9 +310,12 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
 
+    // Validation checks
     const allCurrentScored = assessmentData.itemScores.every(s => s.currentScore !== null);
     const allDesiredScored = assessmentData.itemScores.every(s => s.desiredScore !== null);
     const itemsSelected = assessmentData.improvementItems.length > 0;
+    // Ensure *at least one* action with text AND date per selected item
+    // And ensure *all* actions with text also have a date
     const actionsDefined = assessmentData.improvementItems.every(ii =>
       ii.actions.some(a => a.text.trim() !== '' && a.completionDate !== null) &&
       ii.actions.every(a => a.text.trim() === '' || a.completionDate !== null)
@@ -319,9 +333,10 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
         title: "Informações Incompletas",
         description: description,
         variant: "destructive",
-        duration: 7000,
+        duration: 7000, // Longer duration for detailed message
       });
 
+      // Guide user to the first incomplete stage
       if (!allCurrentScored) goToStage('currentScore');
       else if (!allDesiredScored) goToStage('desiredScore');
       else if (!itemsSelected) goToStage('selectItems');
@@ -332,32 +347,47 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
 
     const userDataToSend: UserData = {
       ...assessmentData.userInfo,
-      assessmentResults: formatAssessmentResults(), // Uses percentages now
+      assessmentResults: formatAssessmentResults(),
       actionPlan: formatActionPlan(),
     };
 
     try {
-      // TODO: Replace console.log with actual email sending logic
-      // await sendUserDataEmail(userDataToSend);
-      console.log("Dados a serem enviados:", JSON.stringify(userDataToSend, null, 2));
+      // TODO: Implement actual email sending logic using a service like Resend, SendGrid, etc.
+      // For now, we just log to the console.
+      // await sendUserDataEmail(userDataToSend); // This would be the actual call
+      console.log("--- DADOS DA AVALIAÇÃO (SIMULANDO ENVIO DE EMAIL) ---");
+      console.log("Para:", userDataToSend.email);
+      console.log("Nome:", userDataToSend.fullName);
+      console.log("\nResultados:");
+      console.log(userDataToSend.assessmentResults);
+      console.log("\nPlano de Ação:");
+      console.log(userDataToSend.actionPlan);
+      console.log("-----------------------------------------------------");
+
       toast({
         title: "Sucesso!",
-        description: "Sua avaliação foi enviada com sucesso. Verifique seu e-mail (simulado).",
+        description: "Sua avaliação foi finalizada. Os resultados foram registrados no console (simulando envio de email).",
+        duration: 6000,
       });
-      goToStage('summary');
+      goToStage('summary'); // Move to summary page after successful "submission"
     } catch (error) {
-      console.error("Erro ao enviar avaliação:", error);
+      console.error("Erro ao 'enviar' avaliação:", error);
       toast({
-        title: "Erro ao Enviar",
-        description: "Houve um problema ao enviar sua avaliação. Tente novamente mais tarde.",
+        title: "Erro ao Finalizar",
+        description: "Houve um problema ao finalizar sua avaliação. Verifique o console para detalhes.",
         variant: "destructive",
       });
     }
-  }, [assessmentData, formatAssessmentResults, formatActionPlan, goToStage, toast, calculateCategoryPercentages]);
+  }, [assessmentData, formatAssessmentResults, formatActionPlan, goToStage, toast]);
 
-  // Function to reset the assessment state
+  // Function to reset the assessment state to initial values
   const resetAssessment = useCallback(() => {
-    setAssessmentData(initialAssessmentState);
+    setAssessmentData({
+        userInfo: null,
+        itemScores: initialItemScores.map(item => ({ ...item })), // Ensure fresh copy
+        improvementItems: [],
+        stage: 'userInfo',
+    });
     toast({ title: "Avaliação Reiniciada", description: "Você pode começar uma nova avaliação." });
   }, [toast]);
 
@@ -371,14 +401,14 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
     removeImprovementItem,
     updateActionItem,
     updateActionDate,
-    removeActionItem,
+    removeActionItem, // Function to clear action text/date
     goToStage,
     submitAssessment,
     isItemSelectedForImprovement,
     calculateCategoryScores, // Calculates averages
     calculateCategoryPercentages, // Calculates percentages
     getActionsForItem,
-    resetAssessment, // Added reset function
+    resetAssessment, // Function to reset entire assessment
   };
 
   return <AssessmentContext.Provider value={value}>{children}</AssessmentContext.Provider>;
@@ -391,4 +421,3 @@ export const useAssessment = () => {
   }
   return context;
 };
-```

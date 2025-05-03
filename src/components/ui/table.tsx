@@ -75,7 +75,7 @@ const TableHead = React.forwardRef<
     ref={ref}
     className={cn(
       // Increased default horizontal padding to px-6
-      "h-12 px-6 py-4 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0",
+      "h-12 px-4 sm:px-6 py-3 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0", // Adjusted padding
       className
     )}
     {...props}
@@ -90,7 +90,7 @@ const TableCell = React.forwardRef<
   <td
     ref={ref}
     // Increased default horizontal padding to px-6
-    className={cn("px-6 py-4 align-middle [&:has([role=checkbox])]:pr-0", className)}
+    className={cn("px-4 sm:px-6 py-4 align-middle [&:has([role=checkbox])]:pr-0", className)} // Adjusted padding
     {...props}
   />
 ))
@@ -118,4 +118,3 @@ export {
   TableCell,
   TableCaption,
 }
-```
