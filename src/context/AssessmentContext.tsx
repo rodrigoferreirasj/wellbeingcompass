@@ -13,7 +13,7 @@ import type {
   ActionItem
 } from '@/types/assessment';
 import { initialItemScores, wellbeingCategories, wellbeingItems, getCategoryForItem, getItemDetails } from '@/types/assessment';
-import { sendUserDataEmail, type UserData } from '@/services/email-service';
+import { sendUserDataEmail, type UserData } from '@/services/email-service'; // Assuming this path is correct
 import { useToast } from "@/hooks/use-toast";
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -47,7 +47,8 @@ interface AssessmentContextProps {
   updateActionDate: (itemId: string, actionIndex: number, date: Date | null) => void;
   removeActionItem: (itemId: string, actionIndex: number) => void; // For clearing text/date
   goToStage: (stage: AssessmentStage) => void;
-  submitAssessment: () => Promise<void>;
+  submitAssessment: () => Promise<void>; // This transitions to summary
+  sendResultsToCoach: () => Promise<void>; // New function to send email
   isItemSelectedForImprovement: (itemId: string) => boolean;
   calculateCategoryScores: () => CategoryScore[]; // Calculates averages
   calculateCategoryPercentages: () => CategoryPercentage[]; // Calculates percentages
@@ -85,9 +86,12 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
  const selectImprovementItem = useCallback((itemId: string) => {
     let itemSelected = false;
     let limitReached = false;
+    let alreadySelected = false;
+
     setAssessmentData(prev => {
-      if (prev.improvementItems.some(ii => ii.itemId === itemId)) {
-         return prev; // Already selected
+      alreadySelected = prev.improvementItems.some(ii => ii.itemId === itemId);
+      if (alreadySelected) {
+         return prev; // Will be handled by removeImprovementItem if clicked again
       }
       if (prev.improvementItems.length >= 3) {
          limitReached = true;
@@ -104,22 +108,33 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
       };
     });
 
-    // Call toast *after* the state update
+    // Separate toast logic after state update attempt
     if (limitReached) {
         toast({ title: "Limite Atingido", description: "Você já selecionou 3 itens para melhorar.", variant: "destructive" });
-    } else if (itemSelected) {
+    } else if (itemSelected) { // Only toast if it was actually selected in this call
         toast({ title: `Item "${getItemDetails(itemId)?.name}" selecionado para melhoria.` });
     }
- }, [toast]); // Ensure toast is a stable dependency
+ }, [toast]); // toast is a stable dependency
 
   const removeImprovementItem = useCallback((itemId: string) => {
-    setAssessmentData(prev => ({
-      ...prev,
-      improvementItems: prev.improvementItems.filter(ii => ii.itemId !== itemId),
-    }));
-    // Call toast *after* the state update
-    toast({ title: `Item "${getItemDetails(itemId)?.name}" removido da seleção.` });
-  }, [toast]); // Ensure toast is a stable dependency
+     let itemRemoved = false;
+     setAssessmentData(prev => {
+        const exists = prev.improvementItems.some(ii => ii.itemId === itemId);
+        if (exists) {
+            itemRemoved = true;
+            return {
+                ...prev,
+                improvementItems: prev.improvementItems.filter(ii => ii.itemId !== itemId),
+            };
+        }
+        return prev; // No change if item wasn't selected
+     });
+
+      // Separate toast logic after state update attempt
+     if (itemRemoved) {
+        toast({ title: `Item "${getItemDetails(itemId)?.name}" removido da seleção.` });
+     }
+  }, [toast]); // toast is a stable dependency
 
   const isItemSelectedForImprovement = useCallback((itemId: string): boolean => {
     return assessmentData.improvementItems.some(ii => ii.itemId === itemId);
@@ -184,7 +199,6 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
 
 
   const goToStage = useCallback((stage: AssessmentStage) => {
-     // Stage names should be correct now: 'userInfo', 'currentScore', 'desiredScore', 'selectItems', 'defineActions', 'summary'
      setAssessmentData(prev => ({ ...prev, stage: stage }));
   }, []);
 
@@ -311,83 +325,103 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
     return planString;
   }, [assessmentData.improvementItems]);
 
-
-  const submitAssessment = useCallback(async () => {
-     if (!assessmentData.userInfo) {
-      toast({ title: "Erro", description: "Informações do usuário estão faltando.", variant: "destructive" });
-      goToStage('userInfo');
-      return;
+   // Internal validation function
+  const validateAssessmentCompletion = useCallback(() => {
+    if (!assessmentData.userInfo) {
+        return { valid: false, message: "Informações do usuário estão faltando.", stage: 'userInfo' };
     }
-
-    // Validation checks
     const allCurrentScored = assessmentData.itemScores.every(s => s.currentScore !== null);
+    if (!allCurrentScored) {
+        return { valid: false, message: "Avalie todos os itens no estágio 'Atual'.", stage: 'currentScore' };
+    }
     const allDesiredScored = assessmentData.itemScores.every(s => s.desiredScore !== null);
+    if (!allDesiredScored) {
+        return { valid: false, message: "Defina notas desejadas para todos os itens.", stage: 'desiredScore' };
+    }
     const itemsSelected = assessmentData.improvementItems.length > 0;
-    // Ensure *at least one* action with text AND date per selected item
-    // And ensure *all* actions with text also have a date
+    if (!itemsSelected) {
+        return { valid: false, message: "Selecione pelo menos um item para melhorar.", stage: 'selectItems' };
+    }
     const actionsDefined = assessmentData.improvementItems.every(ii =>
       ii.actions.some(a => a.text.trim() !== '' && a.completionDate !== null) &&
       ii.actions.every(a => a.text.trim() === '' || a.completionDate !== null)
     );
-
-
-    if (!allCurrentScored || !allDesiredScored || !itemsSelected || !actionsDefined) {
-       let description = "Por favor, complete todas as etapas antes de concluir:\n";
-       if (!allCurrentScored) description += "- Avalie todos os itens no estágio 'Atual'.\n";
-       if (!allDesiredScored) description += "- Defina notas desejadas para todos os itens.\n";
-       if (!itemsSelected) description += "- Selecione pelo menos um item para melhorar.\n";
-       if (!actionsDefined) description += "- Para cada item selecionado, defina pelo menos uma ação completa (texto e data). Certifique-se de que todas as ações com texto tenham uma data.";
-
-       toast({
-        title: "Informações Incompletas",
-        description: description,
-        variant: "destructive",
-        duration: 7000, // Longer duration for detailed message
-      });
-
-      // Guide user to the first incomplete stage
-      if (!allCurrentScored) goToStage('currentScore');
-      else if (!allDesiredScored) goToStage('desiredScore');
-      else if (!itemsSelected) goToStage('selectItems');
-      else goToStage('defineActions');
-      return;
+    if (!actionsDefined) {
+        return { valid: false, message: "Para cada item selecionado, defina pelo menos uma ação completa (texto e data). Certifique-se de que todas as ações com texto tenham uma data.", stage: 'defineActions' };
     }
+    return { valid: true };
+  }, [assessmentData]);
 
 
-    const userDataToSend: UserData = {
-      ...assessmentData.userInfo,
-      assessmentResults: formatAssessmentResults(),
-      actionPlan: formatActionPlan(),
-    };
+  // Function to just move to the summary stage after defineActions
+  const submitAssessment = useCallback(async () => {
+     const validation = validateAssessmentCompletion();
+     if (!validation.valid) {
+        toast({
+            title: "Informações Incompletas",
+            description: validation.message,
+            variant: "destructive",
+            duration: 7000,
+        });
+        if (validation.stage) {
+            goToStage(validation.stage as AssessmentStage);
+        }
+        return;
+     }
 
-    try {
-      // TODO: Implement actual email sending logic using a service like Resend, SendGrid, etc.
-      // For now, we just log to the console.
-      // await sendUserDataEmail(userDataToSend); // This would be the actual call
-      console.log("--- DADOS DA AVALIAÇÃO (SIMULANDO ENVIO DE EMAIL) ---");
-      console.log("Para:", userDataToSend.email);
-      console.log("Nome:", userDataToSend.fullName);
-      console.log("\nResultados:");
-      console.log(userDataToSend.assessmentResults);
-      console.log("\nPlano de Ação:");
-      console.log(userDataToSend.actionPlan);
-      console.log("-----------------------------------------------------");
+     // If validation passes, simply go to summary
+     goToStage('summary');
+     toast({
+        title: "Revisão Pronta",
+        description: "Revise sua avaliação e plano de ação no resumo.",
+     });
 
-      toast({
-        title: "Sucesso!",
-        description: "Sua avaliação foi finalizada. Os resultados foram registrados no console (simulando envio de email).",
-        duration: 6000,
-      });
-      goToStage('summary'); // Move to summary page after successful "submission"
-    } catch (error) {
-      console.error("Erro ao 'enviar' avaliação:", error);
-      toast({
-        title: "Erro ao Finalizar",
-        description: "Houve um problema ao finalizar sua avaliação. Verifique o console para detalhes.",
-        variant: "destructive",
-      });
-    }
-  }, [assessmentData, formatAssessmentResults, formatActionPlan, goToStage, toast]);
+  }, [validateAssessmentCompletion, goToStage, toast]);
+
+
+   // New function specifically for sending the email
+   const sendResultsToCoach = useCallback(async () => {
+    const validation = validateAssessmentCompletion();
+     if (!validation.valid) {
+        toast({
+            title: "Não é possível enviar",
+            description: `Complete a avaliação primeiro. ${validation.message}`,
+            variant: "destructive",
+            duration: 7000,
+        });
+         if (validation.stage) {
+            goToStage(validation.stage as AssessmentStage);
+        }
+        return;
+     }
+
+      // Prepare data for the email service
+      const userDataToSend: UserData = {
+        ...(assessmentData.userInfo as UserInfo), // UserInfo is guaranteed by validation
+        assessmentResults: formatAssessmentResults(),
+        actionPlan: formatActionPlan(),
+      };
+
+      try {
+        // Call the actual email sending service
+        await sendUserDataEmail(userDataToSend);
+
+        toast({
+          title: "Relatório Enviado!",
+          description: "Seu relatório de avaliação foi enviado para o Coach Rodrigo Ferreira.",
+          duration: 6000,
+        });
+      } catch (error) {
+        console.error("Erro ao enviar relatório por email:", error);
+        toast({
+          title: "Erro ao Enviar",
+          description: "Houve um problema ao enviar seu relatório. Tente novamente mais tarde ou contate o suporte.",
+          variant: "destructive",
+        });
+      }
+
+   }, [assessmentData.userInfo, formatAssessmentResults, formatActionPlan, validateAssessmentCompletion, goToStage, toast]);
+
 
   // Function to reset the assessment state to initial values
   const resetAssessment = useCallback(() => {
@@ -412,7 +446,8 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
     updateActionDate,
     removeActionItem, // Function to clear action text/date
     goToStage,
-    submitAssessment,
+    submitAssessment, // Moves to summary
+    sendResultsToCoach, // Sends email
     isItemSelectedForImprovement,
     calculateCategoryScores, // Calculates averages
     calculateCategoryPercentages, // Calculates percentages
@@ -430,4 +465,3 @@ export const useAssessment = () => {
   }
   return context;
 };
-

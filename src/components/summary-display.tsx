@@ -1,14 +1,14 @@
 
 'use client';
 
-import React, { useRef, useEffect, useState, useMemo } from 'react';
-import Link from 'next/link'; // Import Link
+import React, { useRef, useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
 import { useAssessment } from '@/context/AssessmentContext';
 import { wellbeingItems, wellbeingCategories, getItemDetails, getCategoryForItem } from '@/types/assessment';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Printer, RotateCcw, TrendingUp, Calendar } from 'lucide-react'; // Added Calendar icon
+import { Printer, RotateCcw, TrendingUp, Calendar, Send, Loader2 } from 'lucide-react'; // Added Send and Loader2 icons
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -16,10 +16,11 @@ import { CategoryScoresDisplay } from './category-scores-display';
 
 
 export const SummaryDisplay: React.FC = () => {
-  const { assessmentData, setAssessmentData, calculateCategoryScores, resetAssessment, calculateCategoryPercentages } = useAssessment();
+  const { assessmentData, resetAssessment, sendResultsToCoach } = useAssessment(); // Use sendResultsToCoach
   const { userInfo, itemScores, improvementItems } = assessmentData;
   const printRef = useRef<HTMLDivElement>(null);
   const [isClient, setIsClient] = useState(false);
+  const [isSending, setIsSending] = useState(false); // State for loading button
 
   useEffect(() => {
     setIsClient(true);
@@ -39,7 +40,7 @@ export const SummaryDisplay: React.FC = () => {
                     body { font-family: Arial, sans-serif; margin: 20px; color: #333; }
                     .print-container { width: 100%; }
                     h1 { text-align: center; color: #008080; margin-bottom: 30px; } /* Teal */
-                    .section { margin-bottom: 25px; border: 1px solid #eee; padding: 20px; border-radius: 8px; background-color: #fff; }
+                    .section { margin-bottom: 25px; border: 1px solid #eee; padding: 20px; border-radius: 8px; background-color: #fff; page-break-inside: avoid; } /* Avoid breaking sections */
                     h2 { color: #008080; /* Teal */ border-bottom: 1px solid #ccc; padding-bottom: 8px; margin-bottom: 15px; font-size: 1.4em;}
                     h3 { color: #333; margin-top: 20px; margin-bottom: 10px; font-size: 1.1em; }
                     ul { list-style: none; padding: 0; }
@@ -54,10 +55,12 @@ export const SummaryDisplay: React.FC = () => {
                     .action-item p { margin: 2px 0; }
                     .category-scores-display { margin-bottom: 30px; }
                     /* Table Styling */
-                    table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+                    table { width: 100%; border-collapse: collapse; margin-top: 15px; page-break-inside: auto; } /* Allow table content to break across pages */
+                    tr { page-break-inside: avoid; page-break-after: auto; } /* Avoid breaking rows */
                     th, td { border: 1px solid #ddd; padding: 10px 12px; text-align: left; font-size: 0.9em; }
                     th { background-color: #f2f2f2; color: #333; font-weight: bold; }
                     td span { margin-left: 5px; }
+                    thead { display: table-header-group; } /* Repeat header on each page */
                      @media print {
                         body { margin: 0; color: #000; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
                         .no-print { display: none; }
@@ -67,8 +70,8 @@ export const SummaryDisplay: React.FC = () => {
                         h3 { color: #000 !important; }
                         .category-summary li { border-color: #ccc; }
                         .item-score { border-left-color: #ccc; }
-                        .progress-indicator-custom { background-color: var(--progress-color) !important; }
-                        progress { color: var(--progress-color) !important; }
+                        .progress-indicator-custom { background-color: var(--progress-color, #ccc) !important; /* Fallback color */ }
+                        progress { color: var(--progress-color, #ccc) !important; } /* Might not work consistently */
                         table { page-break-inside: auto; }
                         tr { page-break-inside: avoid; page-break-after: auto; }
                         thead { display: table-header-group; }
@@ -86,8 +89,11 @@ export const SummaryDisplay: React.FC = () => {
             `);
             printWindow.document.close();
             printWindow.focus();
+            // Delay print slightly to allow content rendering
             setTimeout(() => {
                  printWindow.print();
+                 // Optional: close window after printing
+                 // printWindow.close();
             }, 500);
         }
     }
@@ -96,6 +102,21 @@ export const SummaryDisplay: React.FC = () => {
 
   const handleRestart = () => {
      resetAssessment();
+     // Optionally navigate back to the start or reload
+     // window.location.reload();
+  };
+
+  const handleSendResults = async () => {
+      setIsSending(true);
+      try {
+          await sendResultsToCoach();
+          // Success toast is handled within the context function
+      } catch (error) {
+          // Error toast is handled within the context function
+          console.error("Send results failed:", error);
+      } finally {
+          setIsSending(false);
+      }
   };
 
 
@@ -105,7 +126,6 @@ export const SummaryDisplay: React.FC = () => {
 
 
   return (
-    // Wrap Card and Footer in a Fragment or div if needed, for layout
     <>
         <Card className="w-full max-w-5xl">
         <CardContent ref={printRef} className="space-y-8 pt-6">
@@ -125,6 +145,7 @@ export const SummaryDisplay: React.FC = () => {
 
             {/* Combined Category Scores Display Section */}
             <div className="category-scores-display section">
+                 <h2 className="text-xl font-semibold mb-4">Percentuais por Categoria</h2>
                 <CategoryScoresDisplay scoreType="combined" />
             </div>
 
@@ -212,24 +233,36 @@ export const SummaryDisplay: React.FC = () => {
                 </div>
             )}
         </CardContent>
-        <CardFooter className="flex flex-col sm:flex-row justify-end gap-2 pt-6 no-print border-t mt-6">
-            <Button variant="outline" onClick={handleRestart}>
-            <RotateCcw className="mr-2 h-4 w-4" /> Reiniciar Avaliação
-            </Button>
-            <Button onClick={handlePrint}>
-            <Printer className="mr-2 h-4 w-4" /> Imprimir / Salvar PDF
+        <CardFooter className="flex flex-col sm:flex-row justify-between items-center gap-4 pt-6 no-print border-t mt-6 px-6">
+             {/* Group left buttons */}
+             <div className="flex gap-2">
+                <Button variant="outline" onClick={handleRestart}>
+                <RotateCcw className="mr-2 h-4 w-4" /> Reiniciar Avaliação
+                </Button>
+                <Button onClick={handlePrint}>
+                <Printer className="mr-2 h-4 w-4" /> Imprimir / Salvar PDF
+                </Button>
+             </div>
+             {/* Send to coach button on the right */}
+             <Button onClick={handleSendResults} disabled={isSending}>
+                {isSending ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                    <Send className="mr-2 h-4 w-4" />
+                )}
+                {isSending ? 'Enviando...' : 'Enviar Relatório para o Coach'}
             </Button>
         </CardFooter>
         </Card>
 
-        {/* Added Footer Section for Contact Info and Button */}
-        <div className="w-full max-w-5xl text-center p-4 border-t border-border mt-6 bg-muted/50 rounded-lg">
+        {/* Footer Section for Contact Info and Button */}
+        <div className="w-full max-w-5xl text-center p-4 border-t border-border mt-6 bg-muted/50 rounded-lg no-print">
             <p className="text-sm text-muted-foreground mb-3">
                 Agora, para analisar seus dados e te ajudar com seu plano de ação, entre em contato com o Coach Rodrigo Ferreira e agende uma devolutiva grátis sobre o seu resultado.
             </p>
             <Button asChild size="sm">
                 <Link href="https://cal.com/pontosfortes/sessao-gratis" target="_blank" rel="noopener noreferrer">
-                    {/* <Calendar className="mr-2 h-4 w-4" /> Optional Icon */}
+                    <Calendar className="mr-2 h-4 w-4" />
                     Agendar devolutiva grátis
                 </Link>
             </Button>
