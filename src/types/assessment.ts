@@ -101,4 +101,3 @@ export const getCategoryForItem = (itemId: string): WellbeingCategory | undefine
 export const getItemDetails = (itemId: string): WellbeingItem | undefined => {
     return wellbeingItems.find(i => i.id === itemId);
 };
-```
