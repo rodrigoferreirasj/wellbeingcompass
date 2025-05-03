@@ -55,32 +55,29 @@ export const wellbeingCategories: WellbeingCategory[] = [
   { id: 'community', name: 'Comunitário', color: 'hsl(var(--chart-5))' }, // Purple
 ];
 
-// Define Items based on the image
+// Define Items based on the requested visual clockwise order starting from the top
 export const wellbeingItems: WellbeingItem[] = [
-  // Carreira
-  { id: 'trabalho', name: 'Trabalho', categoryId: 'career' },
-  { id: 'desenvolvimento', name: 'Desenvolvimento Intelectual', categoryId: 'career' },
-  { id: 'realizacao', name: 'Realização e Propósito', categoryId: 'career' },
-  // Social
-  { id: 'familia', name: 'Família', categoryId: 'social' },
-  { id: 'amigos', name: 'Amigos', categoryId: 'social' },
-  { id: 'lazer', name: 'Lazer', categoryId: 'social' },
-  { id: 'relacionamento', name: 'Relacionamento Amoroso', categoryId: 'social' },
-  { id: 'hobbies', name: 'Hobbies e Diversão', categoryId: 'social' },
-  // Financeiro
-  { id: 'controle', name: 'Controle Financeiro', categoryId: 'financial' },
-  { id: 'recursos', name: 'Recursos Financeiros', categoryId: 'financial' },
-  // Saúde (Previously Physical) - Includes items listed under Saúde in the image
-  { id: 'fisica', name: 'Física', categoryId: 'physical' }, // Mapped Física under Saúde category
-  { id: 'emocional', name: 'Emocional', categoryId: 'physical' }, // Mapped Emocional under Saúde category
-  { id: 'espiritual', name: 'Espiritual', categoryId: 'physical' }, // Mapped Espiritual under Saúde category
-  // Comunitário
-  { id: 'contribuicao', name: 'Contribuição', categoryId: 'community' },
-  { id: 'conexao', name: 'Conexão', categoryId: 'community' },
+  // Order based on user request for visual representation on the chart
+  // Starting roughly at 12 o'clock and going clockwise
+  { id: 'trabalho', name: 'Trabalho', categoryId: 'career', description: 'Satisfação com sua ocupação principal e ambiente de trabalho.' },
+  { id: 'desenvolvimento', name: 'Desenvolvimento Intelectual', categoryId: 'career', description: 'Aprendizado contínuo e crescimento de habilidades.' },
+  { id: 'realizacao', name: 'Realização e Propósito', categoryId: 'career', description: 'Sentimento de significado e contribuição através do seu trabalho ou vocação.' },
+  { id: 'familia', name: 'Família', categoryId: 'social', description: 'Qualidade dos relacionamentos com membros da família.' },
+  { id: 'amigos', name: 'Amigos', categoryId: 'social', description: 'Conexões sociais e suporte de amigos.' },
+  { id: 'lazer', name: 'Lazer', categoryId: 'social', description: 'Tempo dedicado a atividades prazerosas e relaxantes.' },
+  { id: 'relacionamento', name: 'Relacionamento Amoroso', categoryId: 'social', description: 'Satisfação com a parceria íntima, se aplicável.' },
+  { id: 'hobbies', name: 'Hobbies e Diversão', categoryId: 'social', description: 'Engajamento em atividades recreativas e interesses pessoais.' },
+  { id: 'controle', name: 'Controle Financeiro', categoryId: 'financial', description: 'Capacidade de gerenciar suas finanças e orçamento.' },
+  { id: 'recursos', name: 'Recursos Financeiros', categoryId: 'financial', description: 'Suficiência de dinheiro para atender às necessidades e desejos.' },
+  { id: 'fisica', name: 'Física', categoryId: 'physical', description: 'Nível de saúde física, energia e vitalidade.' },
+  { id: 'emocional', name: 'Emocional', categoryId: 'physical', description: 'Bem-estar mental, gerenciamento de estresse e resiliência.' },
+  { id: 'espiritual', name: 'Espiritual', categoryId: 'physical', description: 'Conexão com valores, crenças ou um senso de propósito maior.' },
+  { id: 'contribuicao', name: 'Contribuição', categoryId: 'community', description: 'Envolvimento em atividades que beneficiam a comunidade ou causas maiores.' },
+  { id: 'conexao', name: 'Conexão', categoryId: 'community', description: 'Sentimento de pertencimento e conexão com a comunidade local ou grupos.' },
 ];
 
 
-// Initial state helper for item scores
+// Initial state helper for item scores - derived automatically from the ordered wellbeingItems
 export const initialItemScores: ItemScore[] = wellbeingItems.map(item => ({
   itemId: item.id,
   currentScore: null,

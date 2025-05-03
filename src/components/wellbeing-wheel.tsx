@@ -180,22 +180,8 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
     const numItems = wellbeingItems.length;
     const anglePerItem = 360 / numItems;
 
-    // Sort items first by category index, then by original index within category
-    const sortedItems = [...wellbeingItems].sort((a, b) => {
-        const catAIndex = wellbeingCategories.findIndex(c => c.id === a.categoryId);
-        const catBIndex = wellbeingCategories.findIndex(c => c.id === b.categoryId);
-        if (catAIndex !== catBIndex) {
-            return catAIndex - catBIndex;
-        }
-        // Find original index if needed, or rely on initial array order if stable
-        const originalIndexA = wellbeingItems.findIndex(item => item.id === a.id);
-        const originalIndexB = wellbeingItems.findIndex(item => item.id === b.id);
-        return originalIndexA - originalIndexB;
-    });
-
-
-    return sortedItems
-      .map((item, index) => { // Index here is the index *after sorting*
+    // Use the order directly from wellbeingItems (already sorted in the desired visual order)
+    return wellbeingItems.map((item, index) => { // Index here is the visual order index
         const category = getCategoryForItem(item.id);
         const itemScoreData = itemScores.find(s => s.itemId === item.id) || { itemId: item.id, currentScore: null, desiredScore: null };
         const categoryColor = category?.color ?? 'hsl(var(--secondary))'; // Fallback color
@@ -233,7 +219,7 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
         }
 
          // Basic calculation for midAngle (adjust startAngle as needed)
-         const startAngle = index * anglePerItem; // Use index *after sorting*
+         const startAngle = index * anglePerItem; // Use index from the map
          const endAngle = startAngle + anglePerItem;
          const midAngle = startAngle + anglePerItem / 2;
 
@@ -247,7 +233,7 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
           fillColor: calculateFillColor(itemScoreData, categoryColor),
           label: labelValue.toString(), // Convert to string for the Label component
           difference: difference,
-          order: index, // Store the sorted order index if needed, or original index if preferred
+          order: index, // Store the visual order index
           // Dummy values for radius, will be calculated by Recharts
           midAngle: midAngle,
           innerRadius: 0, // Placeholder
