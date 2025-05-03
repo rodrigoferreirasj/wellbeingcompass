@@ -26,6 +26,9 @@ interface PieDataItem extends ItemScore {
   label: string; // Display label (score or checkmark)
   difference?: number | null; // Difference between desired and current
   order: number; // For consistent segment ordering
+  midAngle: number; // Added for label positioning
+  innerRadius: number; // Added for label positioning
+  outerRadius: number; // Added for label positioning
 }
 
 // Define angles for labels
@@ -41,7 +44,7 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
     isItemSelectedForImprovement,
     getActionsForItem, // Get actions for the selected item
   } = useAssessment();
-  const { itemScores, stage } = assessmentData;
+  const { itemScores, stage, improvementItems } = assessmentData;
   const { toast } = useToast();
 
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null); // Track selected item ID
@@ -87,12 +90,12 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
 
     if (isSelectionMode) {
       if (isItemSelectedForImprovement(itemId)) {
-        // If clicking an already selected item, potentially deselect or do nothing?
-        // Current behavior: Clicking toggles selection, also sets selectedItemId for action plan display
+        // If clicking an already selected item, deselect it
         removeImprovementItem(itemId);
-        setSelectedItemId(null); // Deselect for action plan view if removing
+        setSelectedItemId(null); // Deselect for action plan view
       } else {
-        if (assessmentData.improvementItems.length < 3) {
+        // Select the item if limit not reached
+        if (improvementItems.length < 3) {
           selectImprovementItem(itemId);
           setSelectedItemId(itemId); // Select for action plan view
         } else {
@@ -104,7 +107,7 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
       // Scoring modes: set the selected item for the slider
        setSelectedItemId(itemId);
     }
-  }, [isSelectionMode, isItemSelectedForImprovement, removeImprovementItem, assessmentData.improvementItems.length, selectImprovementItem, toast]);
+  }, [isSelectionMode, isItemSelectedForImprovement, removeImprovementItem, improvementItems.length, selectImprovementItem, toast]);
 
   const handleSliderChange = (value: number[]) => {
     setSliderValue(value[0]);
@@ -159,6 +162,10 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
 
   // Memoize pieData calculation
  const pieData: PieDataItem[] = useMemo(() => {
+    // Calculate the base angle and properties needed for labels later
+    const numItems = wellbeingItems.length;
+    const anglePerItem = 360 / numItems;
+
     return wellbeingItems
       .map((item, index) => {
         const category = getCategoryForItem(item.id);
@@ -175,23 +182,32 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
 
         if (isSelectionMode) {
           if (isItemSelectedForImprovement(item.id)) {
-            labelValue = '✓';
+            labelValue = '✓'; // Checkmark for selected items
+          } else if (currentDisplayScore !== null && desiredDisplayScore !== null) {
+             difference = desiredDisplayScore - currentDisplayScore;
+             labelValue = difference > 0 ? `+${difference}` : difference.toString(); // Show difference
+          } else if (currentDisplayScore !== null) {
+             labelValue = currentDisplayScore; // Show current if no desired yet
           }
         } else {
-          const currentScore = itemScoreData.currentScore;
-          const desiredScore = itemScoreData.desiredScore;
+           // Scoring modes: Always show the relevant score
+           const currentScore = itemScoreData.currentScore;
+           const desiredScore = itemScoreData.desiredScore;
 
-          if (scoreType === 'current' && currentScore !== null) {
-            labelValue = currentScore;
-          } else if (scoreType === 'desired') {
-            if (desiredScore !== null) {
-               labelValue = desiredScore; // Show desired score
+            if (scoreType === 'current') {
+                labelValue = currentScore !== null ? currentScore : ''; // Show current score or empty
+            } else { // desiredScore mode
+                 labelValue = desiredScore !== null ? desiredScore : ''; // Show desired score or empty
+                 if (currentScore !== null && desiredScore !== null) {
+                   difference = desiredScore - currentScore; // Calculate difference for display elsewhere if needed
+                 }
             }
-            if (currentScore !== null && desiredScore !== null) {
-              difference = desiredScore - currentScore; // Calculate difference
-            }
-          }
         }
+
+         // Basic calculation for midAngle (adjust startAngle as needed)
+         const startAngle = index * anglePerItem;
+         const endAngle = startAngle + anglePerItem;
+         const midAngle = startAngle + anglePerItem / 2;
 
         return {
           ...itemScoreData,
@@ -200,9 +216,13 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
           categoryColor: categoryColor,
           value: 1, // Equal value for equal slices
           fillColor: calculateFillColor(itemScoreData, categoryColor),
-          label: labelValue,
+          label: labelValue.toString(), // Convert to string for the Label component
           difference: difference,
-          order: index, // Keep original order
+          order: index, // Keep original order for sorting consistency
+          // Dummy values for radius, will be calculated by Recharts
+          midAngle: midAngle,
+          innerRadius: 0, // Placeholder
+          outerRadius: 0, // Placeholder
         };
       })
        // Sort primarily by category, then by original item order within category
@@ -221,12 +241,12 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
    // Check if ready to proceed to the next stage
    const isNextDisabled = useMemo(() => {
     if (isSelectionMode) {
-        return assessmentData.improvementItems.length === 0; // Need at least one item selected
+        return improvementItems.length === 0; // Need at least one item selected
     } else {
-        const scoreKey = scoreType === 'current' ? 'currentScore' : 'desiredScore';
-        return itemScores.some(s => s[scoreKey] === null); // Ensure all items are scored
+        const scoreKeyToCompare = scoreType === 'current' ? 'currentScore' : 'desiredScore';
+        return itemScores.some(s => s[scoreKeyToCompare] === null); // Ensure all items are scored for the current stage
     }
-   }, [isSelectionMode, assessmentData.improvementItems, itemScores, scoreType]);
+   }, [isSelectionMode, improvementItems, itemScores, scoreType]);
 
    // Custom Tooltip Component
   const CustomTooltip = ({ active, payload }: any) => {
@@ -241,7 +261,8 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
           <div className="mt-2 space-y-1">
               {data.currentScore !== null && <p>Atual: <span className="font-medium">{data.currentScore}</span></p>}
               {data.desiredScore !== null && <p>Desejado: <span className="font-medium">{data.desiredScore}</span></p>}
-              {scoreType === 'desired' && data.difference !== null && (
+               {/* Always show difference if both scores exist, regardless of mode */}
+              {data.currentScore !== null && data.desiredScore !== null && data.difference !== null && (
                  <p className={cn("flex items-center", data.difference > 0 ? "text-green-600" : data.difference < 0 ? "text-red-600" : "text-muted-foreground")}>
                      Diferença: <span className="font-medium ml-1">{data.difference > 0 ? '+' : ''}{data.difference}</span>
                      {data.difference !== 0 && <TrendingUp className="w-3 h-3 ml-1"/>}
@@ -258,32 +279,78 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
     return null;
   };
 
-   // Custom label rendering function
-    const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, index, payload }: any) => {
-        const radius = innerRadius + (outerRadius - innerRadius) * 1.15; // Adjust multiplier for label distance
+   // Custom label rendering function for names OUTSIDE the pie
+    const renderCustomizedNameLabel = useCallback(({ cx, cy, midAngle, innerRadius, outerRadius, percent, index, payload }: any) => {
+        const radius = outerRadius * 1.1; // Position labels outside the main radius
         const x = cx + radius * Math.cos(-midAngle * RADIAN);
         const y = cy + radius * Math.sin(-midAngle * RADIAN);
         const textAnchor = x > cx ? 'start' : 'end';
+        const name = payload.name; // Use the item name
 
-        // Split long names (simple split on spaces)
-        const nameParts = payload.name.split(' ');
+        // Basic line splitting for longer names
+        const nameParts = name.split(' ');
         const line1 = nameParts.slice(0, Math.ceil(nameParts.length / 2)).join(' ');
         const line2 = nameParts.slice(Math.ceil(nameParts.length / 2)).join(' ');
+
 
         return (
             <text
                 x={x}
                 y={y}
-                fill="hsl(var(--foreground))"
+                fill="hsl(var(--foreground))" // Use theme foreground color
                 textAnchor={textAnchor}
                 dominantBaseline="central"
-                className="text-[10px] sm:text-xs pointer-events-none" // Smaller text, responsive
+                className="text-[10px] sm:text-[11px] pointer-events-none" // Adjust size as needed
+                 style={{ fontWeight: 500 }} // Slightly bolder
             >
-                <tspan x={x} dy={line2 ? "-0.3em" : "0"}>{line1}</tspan>
+                 <tspan x={x} dy={line2 ? "-0.3em" : "0"}>{line1}</tspan>
                 {line2 && <tspan x={x} dy="1.2em">{line2}</tspan>}
             </text>
         );
-    };
+    }, []);
+
+     // Custom label rendering function for scores/checkmarks INSIDE the pie
+     const renderCustomizedScoreLabel = useCallback(({ cx, cy, midAngle, innerRadius, outerRadius, percent, index, payload }: any) => {
+         const entry = pieData[index]; // Get the data for this segment
+         if (!entry || entry.label === '') return null; // Don't render if label is empty
+
+         const radius = innerRadius + (outerRadius - innerRadius) * 0.5; // Position inside segment
+         const x = cx + radius * Math.cos(-midAngle * RADIAN);
+         const y = cy + radius * Math.sin(-midAngle * RADIAN);
+         const isCheckmark = isSelectionMode && entry.label === '✓';
+         const isDifference = isSelectionMode && entry.label.match(/^[-+]\d+$/); // Check if label is a difference like "+2" or "-1"
+
+         let fillColor = "hsl(var(--primary-foreground))"; // Default white
+         let fontWeight: string | number = 'bold';
+         let fontSize = isCheckmark ? 18 : 14; // Checkmark larger
+
+         // Style difference numbers
+         if (isDifference) {
+             const diffValue = parseInt(entry.label, 10);
+             if (diffValue > 0) fillColor = 'hsl(142 71% 90%)'; // Light green text
+             else if (diffValue < 0) fillColor = 'hsl(0 84% 90%)'; // Light red text
+             else fillColor = 'hsl(var(--muted-foreground))'; // Muted for zero difference
+             fontSize = 13; // Slightly smaller for difference
+             fontWeight = 600;
+         }
+
+
+         return (
+         <text
+             x={x}
+             y={y}
+             fill={fillColor}
+             textAnchor="middle"
+             dominantBaseline="central"
+             fontWeight={fontWeight}
+             fontSize={fontSize}
+             className="pointer-events-none"
+         >
+             {entry.label}
+         </text>
+         );
+     }, [pieData, isSelectionMode]); // Depend on pieData and isSelectionMode
+
 
   // Render function
     if (!isClient) {
@@ -302,6 +369,7 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
                   <CardTitle className="text-lg text-center">Avaliar: <span className="text-primary">{selectedItemDetails?.name}</span></CardTitle>
                    <CardDescription className="text-center">
                      {scoreType === 'current' ? 'Qual sua satisfação atual (1-10)?' : 'Qual nota você deseja alcançar (1-10)?'}
+                     {/* Show current score for reference in desired mode */}
                      {scoreType === 'desired' && selectedItemData?.currentScore !== null && ` (Atual: ${selectedItemData.currentScore})`}
                    </CardDescription>
               </CardHeader>
@@ -315,6 +383,7 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
                     className="w-full"
                     aria-label={`Score for ${selectedItemDetails?.name}`}
                  />
+                 {/* Show score and difference */}
                  <div className="mt-2 flex items-center gap-2">
                      <span className="text-2xl font-bold text-primary">{sliderValue}</span>
                      {scoreType === 'desired' && selectedItemData?.currentScore !== null && (
@@ -322,7 +391,7 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
                              (sliderValue - selectedItemData.currentScore) > 0 ? "text-green-600" :
                              (sliderValue - selectedItemData.currentScore) < 0 ? "text-red-600" :
                              "text-muted-foreground")}>
-                             ({sliderValue - selectedItemData.currentScore > 0 ? '+' : ''}{sliderValue - selectedItemData.currentScore})
+                              ({sliderValue - selectedItemData.currentScore >= 0 ? '+' : ''}{sliderValue - selectedItemData.currentScore}) {/* Always show sign */}
                              {sliderValue - selectedItemData.currentScore !== 0 && <TrendingUp className="w-4 h-4 ml-1"/>}
                         </span>
                      )}
@@ -336,6 +405,7 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
        )}
 
         {/* Placeholder for when no item is selected for scoring/selection prompt */}
+        {/* Adjust height based on card height or make it dynamic */}
         {!selectedItemId && !isSelectionMode && (
            <div className="h-[244px] flex items-center justify-center text-center text-muted-foreground mb-6 px-4">
               Clique em um item do gráfico para definir a pontuação {scoreType === 'current' ? 'atual' : 'desejada'}.
@@ -352,23 +422,28 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
       {/* Pie Chart */}
       <div className="relative w-full max-w-lg aspect-square mx-auto mt-4">
           <ResponsiveContainer width="100%" height="100%">
-              <PieChart margin={{ top: 30, right: 30, bottom: 30, left: 30 }}> {/* Add margin for labels */}
+               {/* Adjusted margin for external labels */}
+              <PieChart margin={{ top: 40, right: 40, bottom: 40, left: 40 }}>
                 <Pie
                   data={pieData}
                   cx="50%"
                   cy="50%"
                   labelLine={false}
-                  outerRadius="75%" // Smaller radius to allow for external labels
-                  innerRadius="35%"
+                  outerRadius="70%" // Adjust radius to make space for name labels
+                  innerRadius="30%"
                   dataKey="value"
                   onClick={(_, index) => handlePieClick(pieData[index])}
                   animationDuration={500}
                   animationEasing="ease-out"
                   className="cursor-pointer focus:outline-none"
-                  label={renderCustomizedLabel} // Use custom label renderer
+                  label={renderCustomizedNameLabel} // Render names outside
+                  startAngle={90} // Start at the top
+                  endAngle={-270} // Go clockwise
                 >
                   {pieData.map((entry, index) => {
                     const isSelected = selectedItemId === entry.itemId;
+                    const scoreKey = scoreType === 'current' ? 'currentScore' : scoreType === 'desired' ? 'desiredScore' : '';
+
                     return (
                       <Cell
                         key={`cell-${index}`}
@@ -377,43 +452,33 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
                         strokeWidth={isSelected ? 3 : 1}
                         className="focus:outline-none transition-all duration-300 hover:opacity-80"
                         tabIndex={0}
-                        aria-label={`${entry.name}: ${isSelectionMode ? (isItemSelectedForImprovement(entry.itemId) ? 'Selecionado' : 'Clique para selecionar') : (entry[scoreKey] ?? 'Não avaliado')}`}
+                        aria-label={`${entry.name}: ${isSelectionMode ? (isItemSelectedForImprovement(entry.itemId) ? 'Selecionado' : 'Clique para selecionar') : (scoreKey && entry[scoreKey] !== null ? entry[scoreKey] : 'Não avaliado')}`}
+
                       />
                     );
                   })}
-                   {/* Internal labels (score/checkmark) */}
-                   <Label
-                      content={({ viewBox, value, index }) => {
-                          const entry = pieData[index];
-                          if (!entry || entry.label === '') return null; // Don't render if label is empty
-
-                          const { cx, cy } = viewBox;
-                          const angle = entry.midAngle; // Use midAngle from pieData if available, else calculate
-                          const radius = entry.innerRadius + (entry.outerRadius - entry.innerRadius) * 0.5; // Position inside segment
-                          const x = cx + radius * Math.cos(-angle * RADIAN);
-                          const y = cy + radius * Math.sin(-angle * RADIAN);
-                          const isCheckmark = isSelectionMode && entry.label === '✓';
-
-
-                          return (
-                          <text
-                              x={x}
-                              y={y}
-                              fill="hsl(var(--primary-foreground))" // White text
-                              textAnchor="middle"
-                              dominantBaseline="central"
-                              fontWeight="bold"
-                              fontSize={isCheckmark ? 18 : 16} // Slightly larger checkmark
-                              className="pointer-events-none"
-                          >
-                              {entry.label}
-                          </text>
-                          );
-                      }}
-                      dataKey="label" // Use the pre-calculated label
-                      position="inside" // Ensure Recharts handles positioning context
-                  />
                 </Pie>
+                 {/* Second Pie layer for internal score/check labels */}
+                 <Pie
+                     data={pieData}
+                     cx="50%"
+                     cy="50%"
+                     labelLine={false}
+                     outerRadius="70%" // Match the outer radius of the first pie
+                     innerRadius="30%" // Match the inner radius of the first pie
+                     dataKey="value"
+                     label={renderCustomizedScoreLabel} // Render scores/checks inside
+                     startAngle={90} // Match start angle
+                     endAngle={-270} // Match end angle
+                     isAnimationActive={false} // No animation for the label layer
+                     className="pointer-events-none" // Don't interact with this layer
+                 >
+                     {/* Render transparent cells so labels have context */}
+                     {pieData.map((entry, index) => (
+                         <Cell key={`label-cell-${index}`} fill="transparent" stroke="none" />
+                     ))}
+                 </Pie>
+
                 <Tooltip content={<CustomTooltip />} cursor={{ fill: 'hsla(var(--muted), 0.3)' }}/>
               </PieChart>
           </ResponsiveContainer>
@@ -433,11 +498,11 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
           <Button variant="outline" onClick={() => goToStage(prevStage)}>
             <ArrowLeft className="mr-2 h-4 w-4" /> Voltar
           </Button>
-          <Button onClick={() => goToStage(nextStage)} disabled={isNextDisabled()}>
+          <Button onClick={() => goToStage(nextStage)} disabled={isNextDisabled}>
              Próximo <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
         </div>
-        {isNextDisabled() && !isSelectionMode && (
+        {isNextDisabled && !isSelectionMode && (
             <p className="text-xs text-destructive text-center mt-2 max-w-lg">
                 Por favor, avalie todos os itens antes de prosseguir.
             </p>
