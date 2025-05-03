@@ -83,35 +83,43 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
  const selectImprovementItem = useCallback((itemId: string) => {
+    let itemSelected = false;
+    let limitReached = false;
     setAssessmentData(prev => {
       if (prev.improvementItems.some(ii => ii.itemId === itemId)) {
-         // Already selected, do nothing or provide feedback (handled in component)
-         return prev;
+         return prev; // Already selected
       }
       if (prev.improvementItems.length >= 3) {
-         toast({ title: "Limite Atingido", description: "Você já selecionou 3 itens para melhorar.", variant: "destructive" });
-         return prev; // Don't add if limit reached
+         limitReached = true;
+         return prev; // Limit reached
       }
       const newItem: ImprovementItem = {
         itemId: itemId,
-        // Initialize with 3 empty action slots
         actions: Array(3).fill(null).map((_, index) => ({ id: `${itemId}-action-${index}-${Date.now()}`, text: '', completionDate: null })),
       };
-      toast({ title: `Item "${getItemDetails(itemId)?.name}" selecionado para melhoria.` });
+      itemSelected = true; // Mark item as selected in this update cycle
       return {
         ...prev,
         improvementItems: [...prev.improvementItems, newItem],
       };
     });
-  }, [toast]);
+
+    // Call toast *after* the state update
+    if (limitReached) {
+        toast({ title: "Limite Atingido", description: "Você já selecionou 3 itens para melhorar.", variant: "destructive" });
+    } else if (itemSelected) {
+        toast({ title: `Item "${getItemDetails(itemId)?.name}" selecionado para melhoria.` });
+    }
+ }, [toast]); // Ensure toast is a stable dependency
 
   const removeImprovementItem = useCallback((itemId: string) => {
     setAssessmentData(prev => ({
       ...prev,
       improvementItems: prev.improvementItems.filter(ii => ii.itemId !== itemId),
     }));
-     toast({ title: `Item "${getItemDetails(itemId)?.name}" removido da seleção.` });
-  }, [toast]);
+    // Call toast *after* the state update
+    toast({ title: `Item "${getItemDetails(itemId)?.name}" removido da seleção.` });
+  }, [toast]); // Ensure toast is a stable dependency
 
   const isItemSelectedForImprovement = useCallback((itemId: string): boolean => {
     return assessmentData.improvementItems.some(ii => ii.itemId === itemId);
@@ -170,8 +178,9 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
             : ii
         ),
       }));
+       // Call toast *after* the state update
        toast({ title: "Ação Limpa", description: "O texto e a data da ação foram removidos." });
-  }, [toast]);
+  }, [toast]); // Ensure toast is a stable dependency
 
 
   const goToStage = useCallback((stage: AssessmentStage) => {
@@ -421,3 +430,4 @@ export const useAssessment = () => {
   }
   return context;
 };
+
