@@ -11,24 +11,23 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription }
 import { ArrowRight, ArrowLeft, CheckCircle, Target, Star, TrendingUp } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
-import { ActionPlan } from './action-plan';
-import { CategoryScoresDisplay } from './category-scores-display';
+import { ActionPlan } from './action-plan'; // Keep import, but conditionally render
+import { CategoryScoresDisplay } from './category-scores-display'; // Displays percentages now
 
 interface WellbeingWheelProps {
   scoreType: 'current' | 'desired' | 'select';
 }
 
 interface PieDataItem extends ItemScore {
-  itemId: string; // Explicitly add itemId here
+  itemId: string;
   name: string;
   categoryName: string;
   categoryColor: string;
   value: number; // Fixed value for equal slices
   fillColor: string;
   label: string; // Display label (score or checkmark)
-  difference?: number | null; // Difference between desired and current
-  order: number; // For consistent segment ordering
-  // Recharts properties that will be calculated:
+  difference?: number | null;
+  order: number;
   cx?: number;
   cy?: number;
   midAngle?: number;
@@ -37,11 +36,9 @@ interface PieDataItem extends ItemScore {
   startAngle?: number;
   endAngle?: number;
   percent?: number;
-  payload?: any; // Ensure payload is part of the type for safety
+  payload?: any;
 }
 
-
-// Define angles for labels
 const RADIAN = Math.PI / 180;
 
 export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => {
@@ -52,7 +49,7 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
     removeImprovementItem,
     goToStage,
     isItemSelectedForImprovement,
-    getActionsForItem,
+    getActionsForItem, // Keep if needed elsewhere, not used in this component now
   } = useAssessment();
   const { itemScores, stage, improvementItems } = assessmentData;
   const { toast } = useToast();
@@ -86,44 +83,39 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
       const scoreKey = scoreType === 'current' ? 'currentScore' : 'desiredScore';
       setSliderValue(selectedItemData[scoreKey] ?? 5);
     } else if (isSelectionMode) {
-       if (selectedItemId && !isItemSelectedForImprovement(selectedItemId)) {
-           setSelectedItemId(null);
-       }
+       // In selection mode, don't automatically deselect if the item is selected
+       // Just keep track of the last clicked item for potential visual feedback (like border)
     } else if (!isSelectionMode && !selectedItemId) {
          setSliderValue(5);
     }
-  }, [selectedItemData, scoreType, isSelectionMode, selectedItemId, isItemSelectedForImprovement]);
+  }, [selectedItemData, scoreType, isSelectionMode, selectedItemId]); // Removed isItemSelectedForImprovement dependency
 
 
-  // FIX: Use payload data to get the correct itemId on click
  const handlePieClick = useCallback((data: any, index: number) => {
-    // Recharts passes the cell props here, including the payload we assigned.
-    const clickedItem = data?.payload as PieDataItem; // Access the payload property
+    const clickedItem = data?.payload as PieDataItem;
 
     if (!clickedItem || !clickedItem.itemId) {
         console.error("Pie click error: Invalid payload data", data);
-        return; // Exit if payload is invalid
+        return;
     }
     const itemId = clickedItem.itemId;
-    // console.log("Clicked Item ID:", itemId, "Name:", clickedItem.name); // Debug log
+
+    setSelectedItemId(itemId); // Always update the selected item ID on click
 
     if (isSelectionMode) {
         if (isItemSelectedForImprovement(itemId)) {
             removeImprovementItem(itemId);
-            setSelectedItemId(null);
+            // Don't nullify selectedItemId here, keep it selected for potential UI feedback
         } else {
             if (improvementItems.length < 3) {
                 selectImprovementItem(itemId);
-                setSelectedItemId(itemId);
             } else {
                 toast({ title: "Limite Atingido", description: "Você já selecionou 3 itens para melhorar.", variant: "destructive" });
-                setSelectedItemId(null);
+                // Keep the item visually selected even if limit reached, user can click again to deselect
             }
         }
-    } else {
-        // Scoring modes: set the selected item for the slider
-        setSelectedItemId(itemId);
     }
+    // In scoring modes, setting selectedItemId above handles showing the slider
   }, [isSelectionMode, isItemSelectedForImprovement, removeImprovementItem, improvementItems.length, selectImprovementItem, toast]);
 
 
@@ -139,7 +131,7 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
         title: "Pontuação Salva",
         description: `Nota ${sliderValue} salva para ${selectedItemDetails.name}.`,
       });
-      setSelectedItemId(null); // Deselect after confirming score
+      setSelectedItemId(null); // Deselect after confirming score in scoring modes
     }
   };
 
@@ -149,19 +141,24 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
     const itemId = itemScore.itemId;
 
     if (isSelectionMode) {
+        // Highlight selected items in selection mode
         return isItemSelectedForImprovement(itemId) ? 'hsl(var(--accent))' : baseColor;
     }
 
+    // Scoring modes: Apply opacity based on score or highlight if currently selected for scoring
     const scoreKey = scoreType === 'current' ? 'currentScore' : 'desiredScore';
     const score = itemScore[scoreKey];
 
+    if (selectedItemId === itemId) {
+         return 'hsl(var(--ring))'; // Use ring color for active scoring item
+    }
+
     if (score === null) {
-        return selectedItemId === itemId ? 'hsl(var(--accent))' : 'hsl(var(--secondary))';
+        return 'hsl(var(--muted))'; // Muted color for unscored items
     }
 
     const opacity = Math.max(0.1, score / 10);
     try {
-      // Updated regex to handle potential whitespace variations
       const hslMatch = baseColor.match(/hsl\(\s*(\d+)\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%\s*\)/);
       if (hslMatch) {
         return `hsla(${hslMatch[1]}, ${hslMatch[2]}%, ${hslMatch[3]}%, ${opacity})`;
@@ -170,14 +167,12 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
       console.error("Color conversion error", e);
     }
 
-    return baseColor;
+    return baseColor; // Fallback to base color
   }, [isSelectionMode, isItemSelectedForImprovement, scoreType, selectedItemId]);
 
 
- // Memoize pieData calculation, ensuring order matches wellbeingItems
  const pieData: PieDataItem[] = useMemo(() => {
-    // Use the order directly from wellbeingItems (already sorted in the desired visual order)
-    return wellbeingItems.map((item, index) => { // index here corresponds to the visual order
+    return wellbeingItems.map((item, index) => {
         const category = getCategoryForItem(item.id);
         const itemScoreData = itemScores.find(s => s.itemId === item.id) || { itemId: item.id, currentScore: null, desiredScore: null };
         const categoryColor = category?.color ?? 'hsl(var(--secondary))';
@@ -185,7 +180,7 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
         const scoreKey = scoreType === 'current' ? 'currentScore' : 'desiredScore';
         const currentDisplayScore = itemScoreData.currentScore;
         const desiredDisplayScore = itemScoreData.desiredScore;
-        const scoreForColor = itemScoreData[scoreKey]; // Used only for color calculation
+        const scoreForColor = itemScoreData[scoreKey];
 
         let labelValue: string | number = '';
         let difference: number | null = null;
@@ -203,21 +198,21 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
              labelValue = currentDisplayScore;
           }
         } else {
-           const score = itemScoreData[scoreKey]; // The score for the current mode
+           const score = itemScoreData[scoreKey];
            labelValue = score !== null ? score : '';
         }
 
         return {
-          ...itemScoreData, // includes currentScore, desiredScore
-          itemId: item.id, // Crucial: Ensure itemId is here
+          ...itemScoreData,
+          itemId: item.id,
           name: item.name,
           categoryName: category?.name ?? 'Unknown',
           categoryColor: categoryColor,
-          value: 1, // Equal value for equal slices
+          value: 1,
           fillColor: calculateFillColor(itemScoreData, categoryColor),
           label: labelValue.toString(),
           difference: difference,
-          order: index, // Store the visual order index from wellbeingItems
+          order: index,
         };
       });
   }, [itemScores, scoreType, isSelectionMode, isItemSelectedForImprovement, calculateFillColor]);
@@ -232,16 +227,12 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
     }
    }, [isSelectionMode, improvementItems, itemScores, scoreType]);
 
-   // Custom Tooltip Component - Fixed to use correct data item
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
-      // Ensure we access the payload correctly
       const data = payload[0]?.payload as PieDataItem;
-      if (!data || !data.itemId) return null; // Guard against invalid data
+      if (!data || !data.itemId) return null;
 
       const itemDetails = getItemDetails(data.itemId);
-
-      // Re-calculate difference based on the specific item's data in the tooltip
       const difference = data.currentScore !== null && data.desiredScore !== null ? data.desiredScore - data.currentScore : null;
 
       return (
@@ -263,23 +254,31 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
            {isSelectionMode && isItemSelectedForImprovement(data.itemId) && (
                <p className="mt-2 text-accent font-medium flex items-center"><Star className="w-3 h-3 mr-1 fill-accent" />Selecionado para Melhoria</p>
            )}
+           {isSelectionMode && !isItemSelectedForImprovement(data.itemId) && improvementItems.length < 3 && (
+               <p className="mt-2 text-muted-foreground text-xs italic">Clique para selecionar para melhoria.</p>
+           )}
+           {isSelectionMode && isItemSelectedForImprovement(data.itemId) && (
+                <p className="mt-2 text-muted-foreground text-xs italic">Clique novamente para remover da seleção.</p>
+           )}
+           {isSelectionMode && !isItemSelectedForImprovement(data.itemId) && improvementItems.length >= 3 && (
+                <p className="mt-2 text-destructive text-xs italic">Limite de 3 itens selecionados atingido.</p>
+           )}
         </div>
       );
     }
     return null;
   };
 
-   // Custom label rendering function for names OUTSIDE the pie
     const renderCustomizedNameLabel = useCallback(({ cx, cy, midAngle, innerRadius, outerRadius, percent, index, payload }: any) => {
-        // payload here is the specific PieDataItem for this segment
         const entry = payload as PieDataItem;
-        if (!entry || !midAngle) return null; // Guard against missing data
+        if (!entry || !midAngle) return null;
 
-        const radius = outerRadius * 1.15;
+        // Increase multiplier for larger distance
+        const radius = outerRadius * 1.25; // Adjusted multiplier
         const x = cx + radius * Math.cos(-midAngle * RADIAN);
         const y = cy + radius * Math.sin(-midAngle * RADIAN);
         const textAnchor = x > cx ? 'start' : 'end';
-        const name = entry.name; // Use the item name from the payload
+        const name = entry.name;
 
         const nameParts = name.split(' ');
         const line1 = nameParts[0];
@@ -292,16 +291,15 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
                 fill="hsl(var(--foreground))"
                 textAnchor={textAnchor}
                 dominantBaseline="central"
-                className="text-[11px] sm:text-xs pointer-events-none"
+                className="text-xs sm:text-sm pointer-events-none" // Slightly larger text
                  style={{ fontWeight: 500 }}
             >
                  <tspan x={x} dy={line2 ? "-0.5em" : "0"}>{line1}</tspan>
                  {line2 && <tspan x={x} dy="1.2em">{line2}</tspan>}
             </text>
         );
-    }, []); // No dependencies needed if RADIAN is constant
+    }, []);
 
-     // Custom label rendering function for scores/checkmarks INSIDE the pie
      const renderCustomizedScoreLabel = useCallback(({ cx, cy, midAngle, innerRadius, outerRadius, percent, index, payload }: any) => {
          const entry = payload as PieDataItem;
          if (!entry || entry.label === '' || !midAngle) return null;
@@ -315,13 +313,13 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
 
          let fillColor = "hsl(var(--primary-foreground))";
          let fontWeight: string | number = 'bold';
-         let fontSize = isCheckmark ? 20 : 16;
+         let fontSize = isCheckmark ? 24 : 18; // Larger font size
 
          if (isDifferenceLabel && difference !== null) {
              if (difference > 0) fillColor = 'hsl(142 71% 90%)';
              else if (difference < 0) fillColor = 'hsl(0 84% 90%)';
              else fillColor = 'hsl(var(--muted-foreground))';
-             fontSize = 14;
+             fontSize = 16; // Slightly larger difference font size
              fontWeight = 600;
          }
 
@@ -348,193 +346,183 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
     }
 
   return (
-     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full">
+     // Removed grid layout, using flex column now
+     <div className="flex flex-col items-center w-full gap-8">
 
-       {/* Left Column: Slider/Prompt and Category Scores */}
-       <div className="lg:col-span-1 flex flex-col gap-6 order-2 lg:order-1">
-          {selectedItemId && !isSelectionMode && (
-              <Card className="w-full shadow-md transition-all duration-300 ease-out animate-in fade-in slide-in-from-top-10">
-                  <CardHeader>
-                     <CardTitle className="text-lg text-center">Avaliar: <span className="text-primary">{selectedItemDetails?.name}</span></CardTitle>
-                      <CardDescription className="text-center">
-                        {scoreType === 'current' ? 'Qual sua satisfação atual (1-10)?' : 'Qual nota você deseja alcançar (1-10)?'}
-                        {scoreType === 'desired' && selectedItemData?.currentScore !== null && ` (Atual: ${selectedItemData.currentScore})`}
-                      </CardDescription>
-                 </CardHeader>
-                 <CardContent className="flex flex-col items-center px-6 pb-4">
-                    <Slider
-                       min={1}
-                       max={10}
-                       step={1}
-                       value={[sliderValue]}
-                       onValueChange={handleSliderChange}
-                       className="w-full"
-                       aria-label={`Score for ${selectedItemDetails?.name}`}
-                    />
-                    <div className="mt-3 flex items-center gap-2">
-                        <span className="text-3xl font-bold text-primary">{sliderValue}</span>
-                        {scoreType === 'desired' && selectedItemData?.currentScore !== null && (
-                           <span className={cn("text-base font-medium flex items-center",
-                                (sliderValue - selectedItemData.currentScore) > 0 ? "text-green-600" :
-                                (sliderValue - selectedItemData.currentScore) < 0 ? "text-red-600" :
-                                "text-muted-foreground")}>
-                                 ({sliderValue - selectedItemData.currentScore >= 0 ? '+' : ''}{sliderValue - selectedItemData.currentScore})
-                                {sliderValue - selectedItemData.currentScore !== 0 && <TrendingUp className="w-4 h-4 ml-1"/>}
-                           </span>
-                        )}
-                    </div>
-                 </CardContent>
-                 <CardFooter className="flex justify-center gap-4 pb-4">
-                    <Button variant="outline" size="sm" onClick={() => setSelectedItemId(null)}>Cancelar</Button>
-                    <Button size="sm" onClick={confirmScore}>Confirmar Nota</Button>
-                 </CardFooter>
-              </Card>
-          )}
-
-           {!selectedItemId && (
-             <Card className="w-full shadow-sm bg-muted/50">
-               <CardContent className="pt-6 pb-6 text-center text-muted-foreground">
-                 {isSelectionMode
-                   ? "Clique nos itens do gráfico que deseja melhorar (máx. 3)."
-                   : `Clique em um item do gráfico para definir a pontuação ${scoreType === 'current' ? 'atual' : 'desejada'}. ${scoreType === 'desired' ? ' A nota atual será exibida para referência.' : ''}`
-                 }
-               </CardContent>
-             </Card>
-           )}
-
-           <CategoryScoresDisplay scoreType={scoreType === 'select' ? 'desired' : scoreType} />
-
-
-           {isSelectionMode && (
-              <div className="mt-4 lg:hidden"> {/* Show only on smaller screens here */}
-                <h3 className="text-xl font-semibold mb-4 text-center text-primary">
-                    Plano de Ação
-                </h3>
-                {selectedItemId ? (
-                    <ActionPlan selectedItemId={selectedItemId} />
-                ) : (
-                    <div className="h-full flex items-center justify-center text-center text-muted-foreground p-8 border rounded-lg bg-muted/50">
-                        <p>Selecione um item no gráfico para definir ou visualizar o plano de ação.</p>
-                    </div>
-                )}
-              </div>
-           )}
-
-        </div>
-
-
-        {/* Center Column: Pie Chart and Navigation */}
-        <div className="lg:col-span-1 flex flex-col items-center order-1 lg:order-2">
-          <div className="relative w-full max-w-2xl aspect-square mx-auto"> {/* Increased max-width */}
+        {/* Chart Area */}
+        <div className="relative w-full max-w-3xl aspect-square mx-auto"> {/* Increased max-width and aspect-square */}
              <ResponsiveContainer width="100%" height="100%">
-                 <PieChart margin={{ top: 60, right: 60, bottom: 60, left: 60 }}> {/* Increased margins */}
+                 {/* Increased margins significantly */}
+                 <PieChart margin={{ top: 80, right: 80, bottom: 80, left: 80 }}>
                    <Pie
-                     data={pieData} // Use the ordered pieData
+                     data={pieData}
                      cx="50%"
                      cy="50%"
                      labelLine={false}
-                     outerRadius="75%"
+                     outerRadius="80%" // Increased outerRadius
                      innerRadius="30%"
                      dataKey="value"
-                     onClick={handlePieClick} // Handler uses payload
+                     onClick={handlePieClick}
                      animationDuration={500}
                      animationEasing="ease-out"
                      className="cursor-pointer focus:outline-none"
-                     label={renderCustomizedNameLabel} // Names outside
-                     startAngle={90 + (360 / wellbeingItems.length / 2)} // Adjust start angle to center first item at top
-                     endAngle={90 + (360 / wellbeingItems.length / 2) - 360} // Adjust end angle accordingly
+                     label={renderCustomizedNameLabel}
+                     startAngle={90 + (360 / wellbeingItems.length / 2)}
+                     endAngle={90 + (360 / wellbeingItems.length / 2) - 360}
                    >
-                     {/* Render cells based on the ORDERED pieData */}
                      {pieData.map((entry, index) => {
-                       const isSelected = selectedItemId === entry.itemId;
-                       // const scoreKey = scoreType === 'current' ? 'currentScore' : scoreType === 'desired' ? 'desiredScore' : null;
-                       // const scoreValue = scoreKey ? entry[scoreKey] : null;
+                       const isCurrentlySelected = selectedItemId === entry.itemId;
+                       // Determine stroke based on scoring state or selection state
+                       let strokeColor = 'hsl(var(--background))';
+                       let strokeWidth = 1;
+                       if (isCurrentlySelected) {
+                           if (isSelectionMode) {
+                               strokeColor = isItemSelectedForImprovement(entry.itemId) ? 'hsl(var(--accent))' : 'hsl(var(--ring))'; // Accent if selected, Ring if just clicked
+                           } else {
+                               strokeColor = 'hsl(var(--ring))'; // Ring color when selected for scoring
+                           }
+                           strokeWidth = 3;
+                       } else if (isSelectionMode && isItemSelectedForImprovement(entry.itemId)) {
+                           // Keep accent border for items selected for improvement even if not the *last clicked*
+                           strokeColor = 'hsl(var(--accent))';
+                           strokeWidth = 2;
+                       }
 
                        return (
                          <Cell
-                           key={`cell-${entry.itemId}-${index}`} // Use a more unique key
+                           key={`cell-${entry.itemId}`} // Simplified key
                            fill={entry.fillColor}
-                           stroke={isSelected ? 'hsl(var(--ring))' : 'hsl(var(--background))'}
-                           strokeWidth={isSelected ? 3 : 1}
+                           stroke={strokeColor}
+                           strokeWidth={strokeWidth}
                            className="focus:outline-none transition-all duration-300 hover:opacity-80"
                            tabIndex={0}
-                           // IMPORTANT: Pass the specific data entry as the payload
                            payload={entry}
-                           aria-label={`${entry.name}`} // Keep Aria label simple
+                           aria-label={`${entry.name}`}
                          />
                        );
                      })}
                    </Pie>
                     {/* Second Pie layer for internal score/check labels */}
                     <Pie
-                        data={pieData} // Use the same ordered data
+                        data={pieData}
                         cx="50%"
                         cy="50%"
                         labelLine={false}
-                        outerRadius="75%"
+                        outerRadius="80%" // Match outerRadius
                         innerRadius="30%"
                         dataKey="value"
-                        label={renderCustomizedScoreLabel} // Scores/checks inside
-                        startAngle={90 + (360 / wellbeingItems.length / 2)} // Match outer pie angles
-                        endAngle={90 + (360 / wellbeingItems.length / 2) - 360} // Match outer pie angles
+                        label={renderCustomizedScoreLabel}
+                        startAngle={90 + (360 / wellbeingItems.length / 2)}
+                        endAngle={90 + (360 / wellbeingItems.length / 2) - 360}
                         isAnimationActive={false}
                         className="pointer-events-none"
                     >
-                        {/* Transparent cells */}
                         {pieData.map((entry, index) => (
-                            <Cell key={`label-cell-${entry.itemId}-${index}`} fill="transparent" stroke="none" />
+                            <Cell key={`label-cell-${entry.itemId}`} fill="transparent" stroke="none" />
                         ))}
                     </Pie>
 
                    <Tooltip content={<CustomTooltip />} cursor={{ fill: 'hsla(var(--muted), 0.3)' }}/>
                  </PieChart>
              </ResponsiveContainer>
-               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center -mt-4">
-                   {scoreType === 'current' && <Target className="w-8 h-8 sm:w-10 sm:h-10 text-primary mb-1"/>}
-                   {scoreType === 'desired' && <CheckCircle className="w-8 h-8 sm:w-10 sm:h-10 text-primary mb-1"/>}
-                   {scoreType === 'select' && <Star className="w-8 h-8 sm:w-10 sm:h-10 text-primary mb-1"/>}
-                  <span className="text-sm sm:text-base font-medium text-foreground uppercase tracking-wider mt-1">
-                      {scoreType === 'current' ? 'Atual' : scoreType === 'desired' ? 'Desejado' : 'Melhorar'}
-                  </span>
-               </div>
+             {/* Center Icon/Text */}
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center -mt-4">
+                  {scoreType === 'current' && <Target className="w-10 h-10 sm:w-12 sm:h-12 text-primary mb-1"/>}
+                  {scoreType === 'desired' && <CheckCircle className="w-10 h-10 sm:w-12 sm:h-12 text-primary mb-1"/>}
+                  {scoreType === 'select' && <Star className="w-10 h-10 sm:w-12 sm:h-12 text-primary mb-1"/>}
+                 <span className="text-base sm:text-lg font-medium text-foreground uppercase tracking-wider mt-1">
+                     {scoreType === 'current' ? 'Atual' : scoreType === 'desired' ? 'Desejado' : 'Melhorar'}
+                 </span>
+              </div>
            </div>
 
-           <div className="mt-8 flex justify-between w-full max-w-lg">
-             <Button variant="outline" onClick={() => goToStage(prevStage)}>
-               <ArrowLeft className="mr-2 h-4 w-4" /> Voltar
-             </Button>
-             <Button onClick={() => goToStage(nextStage)} disabled={isNextDisabled}>
-                Próximo <ArrowRight className="ml-2 h-4 w-4" />
-             </Button>
-           </div>
-           {isNextDisabled && !isSelectionMode && (
-               <p className="text-xs text-destructive text-center mt-2 max-w-lg">
-                   Por favor, avalie todos os itens antes de prosseguir.
-               </p>
-           )}
-           {isNextDisabled && isSelectionMode && (
-                <p className="text-xs text-destructive text-center mt-2 max-w-lg">
-                   Selecione pelo menos um item para melhorar antes de prosseguir.
-                </p>
-           )}
+         {/* Controls Area (Slider or Selection Prompt) */}
+         <div className="w-full max-w-lg">
+            {selectedItemId && !isSelectionMode && (
+                <Card className="w-full shadow-md transition-all duration-300 ease-out animate-in fade-in slide-in-from-top-10">
+                    <CardHeader>
+                        <CardTitle className="text-lg text-center">Avaliar: <span className="text-primary">{selectedItemDetails?.name}</span></CardTitle>
+                        <CardDescription className="text-center">
+                            {scoreType === 'current' ? 'Qual sua satisfação atual (1-10)?' : 'Qual nota você deseja alcançar (1-10)?'}
+                            {scoreType === 'desired' && selectedItemData?.currentScore !== null && ` (Atual: ${selectedItemData.currentScore})`}
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="flex flex-col items-center px-6 pb-4">
+                        <Slider
+                            min={1}
+                            max={10}
+                            step={1}
+                            value={[sliderValue]}
+                            onValueChange={handleSliderChange}
+                            className="w-full"
+                            aria-label={`Score for ${selectedItemDetails?.name}`}
+                        />
+                        <div className="mt-3 flex items-center gap-2">
+                            <span className="text-3xl font-bold text-primary">{sliderValue}</span>
+                            {scoreType === 'desired' && selectedItemData?.currentScore !== null && (
+                                <span className={cn("text-base font-medium flex items-center",
+                                    (sliderValue - selectedItemData.currentScore) > 0 ? "text-green-600" :
+                                    (sliderValue - selectedItemData.currentScore) < 0 ? "text-red-600" :
+                                    "text-muted-foreground")}>
+                                    ({sliderValue - selectedItemData.currentScore >= 0 ? '+' : ''}{sliderValue - selectedItemData.currentScore})
+                                    {sliderValue - selectedItemData.currentScore !== 0 && <TrendingUp className="w-4 h-4 ml-1"/>}
+                                </span>
+                            )}
+                        </div>
+                    </CardContent>
+                    <CardFooter className="flex justify-center gap-4 pb-4">
+                        <Button variant="outline" size="sm" onClick={() => setSelectedItemId(null)}>Cancelar</Button>
+                        <Button size="sm" onClick={confirmScore}>Confirmar Nota</Button>
+                    </CardFooter>
+                </Card>
+            )}
+
+            {!selectedItemId && ( // Show prompt when no item is selected
+                <Card className="w-full shadow-sm bg-muted/50">
+                <CardContent className="pt-6 pb-6 text-center text-muted-foreground">
+                    {isSelectionMode
+                    ? `Itens selecionados: ${improvementItems.length}/3. Clique nos itens do gráfico que deseja melhorar.`
+                    : `Clique em um item do gráfico para definir a pontuação ${scoreType === 'current' ? 'atual' : 'desejada'}.`
+                    }
+                </CardContent>
+                </Card>
+            )}
+         </div>
+
+
+        {/* Category Percentages Display */}
+        <div className="w-full max-w-2xl">
+            <CategoryScoresDisplay scoreType={scoreType === 'select' ? 'desired' : scoreType} />
         </div>
 
+        {/* Navigation Buttons */}
+        <div className="mt-0 flex justify-between w-full max-w-lg"> {/* Reduced margin-top */}
+            <Button variant="outline" onClick={() => goToStage(prevStage)}>
+            <ArrowLeft className="mr-2 h-4 w-4" /> Voltar
+            </Button>
+            <Button onClick={() => goToStage(nextStage)} disabled={isNextDisabled}>
+                Próximo <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+        </div>
+        {isNextDisabled && !isSelectionMode && (
+            <p className="text-xs text-destructive text-center mt-2 max-w-lg">
+                Por favor, avalie todos os itens antes de prosseguir.
+            </p>
+        )}
+        {isNextDisabled && isSelectionMode && (
+            <p className="text-xs text-destructive text-center mt-2 max-w-lg">
+                Selecione pelo menos um item para melhorar antes de prosseguir.
+            </p>
+        )}
 
-       {/* Right Column: Action Plan (only in select mode, shown on larger screens) */}
-       {isSelectionMode && (
-          <div className="lg:col-span-1 hidden lg:flex lg:flex-col order-3">
-                <h3 className="text-xl font-semibold mb-4 text-center text-primary">
-                    Plano de Ação
-                </h3>
-              {selectedItemId ? (
-                   <ActionPlan selectedItemId={selectedItemId} />
-              ) : (
-                  <div className="h-full flex items-center justify-center text-center text-muted-foreground p-8 border rounded-lg bg-muted/50">
-                      <p>Selecione um item no gráfico para definir ou visualizar o plano de ação.</p>
-                  </div>
-              )}
-          </div>
-       )}
+        {/* Action Plan - Hidden in 'select' mode now */}
+        {/* {isSelectionMode && (
+            <div className="w-full max-w-2xl mt-8">
+                 Action Plan component would be rendered here if needed in this stage
+                 but requirement is to show it in the next stage ('defineActions')
+            </div>
+        )} */}
      </div>
    );
 };
+```

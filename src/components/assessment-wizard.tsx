@@ -5,8 +5,8 @@ import React from 'react';
 import { useAssessment } from '@/context/AssessmentContext';
 import { UserInfoForm } from './user-info-form';
 import { WellbeingWheel } from './wellbeing-wheel';
-import { ActionPlan } from './action-plan'; // Will need updates
-import { SummaryDisplay } from './summary-display'; // Will need updates
+import { ActionPlan } from './action-plan';
+import { SummaryDisplay } from './summary-display';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { wellbeingItems } from '@/types/assessment'; // Import items
@@ -20,10 +20,11 @@ export const AssessmentWizard: React.FC = () => {
     userInfo: <UserInfoForm />,
     currentScore: <WellbeingWheel scoreType="current" />,
     desiredScore: <WellbeingWheel scoreType="desired" />,
-    selectItems: <WellbeingWheel scoreType="select" />, // Changed from selectAreas
-    // defineActions now renders ActionPlan directly, showing all selected items
+    // Stage 'selectItems' now only shows the wheel for selection
+    selectItems: <WellbeingWheel scoreType="select" />,
+    // Stage 'defineActions' now shows the ActionPlan for all selected items
     defineActions: <ActionPlan renderAllSelected={true} />,
-    summary: <SummaryDisplay />, // SummaryDisplay component needs updates
+    summary: <SummaryDisplay />,
   };
 
   // Update titles
@@ -31,18 +32,18 @@ export const AssessmentWizard: React.FC = () => {
     userInfo: 'Informações Pessoais',
     currentScore: 'Avalie seu Bem-Estar Atual (por Item)',
     desiredScore: 'Defina seu Bem-Estar Desejado (por Item)',
-    selectItems: 'Selecione Itens e Defina Ações', // Combined selection and initial action view
-    defineActions: 'Revise e Complete seu Plano de Ação', // Changed
+    selectItems: 'Selecione Itens para Melhorar', // Changed title
+    defineActions: 'Defina seu Plano de Ação', // Changed title
     summary: 'Resumo da Avaliação',
   };
 
    // Update descriptions
    const stageDescriptions: { [key in typeof stage]: string } = {
     userInfo: 'Por favor, preencha suas informações para começar.',
-    currentScore: `Clique em cada item da Roda do Bem-Estar para dar uma nota de 1 a 10 para sua satisfação atual. Veja as médias por categoria ao lado.`,
-    desiredScore: `Agora, clique novamente em cada item para indicar a nota que você deseja alcançar (1 a 10). Veja a nota atual para referência e as médias desejadas ao lado.`,
-    selectItems: `Selecione até 3 itens para melhorar clicando no gráfico. Defina ações para o item selecionado ao lado (ou abaixo em telas menores).`, // Changed
-    defineActions: 'Revise todas as ações para os itens selecionados. Certifique-se de que cada ação tenha uma descrição e uma data de conclusão.', // Changed
+    currentScore: `Clique em cada item da Roda do Bem-Estar para dar uma nota de 1 a 10 para sua satisfação atual. Veja os percentuais por categoria abaixo.`, // Updated description
+    desiredScore: `Agora, clique novamente em cada item para indicar a nota que você deseja alcançar (1 a 10). Veja a nota atual para referência e os percentuais desejados abaixo.`, // Updated description
+    selectItems: `Selecione até 3 itens para melhorar clicando no gráfico. Clique em "Próximo" para definir as ações.`, // Changed description
+    defineActions: 'Para cada item selecionado, defina pelo menos uma ação com descrição e data de conclusão.', // Changed description
     summary: 'Revise sua avaliação e plano de ação. Você pode imprimir esta página.',
   };
 
@@ -51,8 +52,8 @@ export const AssessmentWizard: React.FC = () => {
     userInfo: 0,
     currentScore: 17,
     desiredScore: 34,
-    selectItems: 51, // Changed
-    defineActions: 68, // Keep as is for now
+    selectItems: 51, // Stage remains
+    defineActions: 68, // Stage remains
     summary: 100,
   };
 

@@ -6,22 +6,17 @@ import { useAssessment } from '@/context/AssessmentContext';
 import { wellbeingItems, wellbeingCategories, getItemDetails, getCategoryForItem } from '@/types/assessment'; // Updated imports
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, Cell, LabelList } from 'recharts'; // Using BarChart now
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'; // Import Table components
 import { Printer, RotateCcw, TrendingUp } from 'lucide-react'; // Added TrendingUp
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { CategoryScoresDisplay } from './category-scores-display'; // Import CategoryScoresDisplay
 
-interface ChartData {
-  name: string; // Category Name
-  id: string; // Category ID
-  current: number | null;
-  desired: number | null;
-  color: string;
-}
+// Removed ChartData interface as we use CategoryScoresDisplay now
 
 export const SummaryDisplay: React.FC = () => {
-  const { assessmentData, setAssessmentData, calculateCategoryScores } = useAssessment();
+  const { assessmentData, setAssessmentData, calculateCategoryScores, resetAssessment, calculateCategoryPercentages } = useAssessment(); // Added resetAssessment and calculateCategoryPercentages
   const { userInfo, itemScores, improvementItems } = assessmentData;
   const printRef = useRef<HTMLDivElement>(null);
   const [isClient, setIsClient] = useState(false);
@@ -30,33 +25,14 @@ export const SummaryDisplay: React.FC = () => {
     setIsClient(true); // Indicate client-side rendering
   }, []);
 
-  // Calculate category scores using the context function
-  const categoryScores = useMemo(() => {
-      if (!isClient) return []; // Avoid calculation on server
-      return calculateCategoryScores();
-  }, [calculateCategoryScores, isClient]);
-
-
-  // Prepare data for the Bar Chart (using category averages)
-  const chartData: ChartData[] = useMemo(() => {
-      return categoryScores.map(catScore => {
-          const category = wellbeingCategories.find(c => c.id === catScore.categoryId);
-          return {
-              id: catScore.categoryId,
-              name: catScore.categoryName,
-              current: catScore.currentAverage,
-              desired: catScore.desiredAverage,
-              color: category?.color ?? 'hsl(var(--secondary))', // Use category color
-          };
-      });
-  }, [categoryScores]);
-
+  // No longer need separate chartData calculation, will use CategoryScoresDisplay directly
 
   const handlePrint = () => {
     const printContents = printRef.current?.innerHTML;
     if (printContents && window) {
        const printWindow = window.open('', '_blank', 'height=800,width=1000');
        if (printWindow) {
+            // Updated CSS for better print layout and table spacing
             printWindow.document.write(`
               <html>
               <head>
@@ -78,15 +54,14 @@ export const SummaryDisplay: React.FC = () => {
                     .action-plan h3 { border-bottom: none; margin-bottom: 5px; }
                     .action-item { margin-left: 20px; margin-bottom: 8px; font-size: 0.95em; }
                     .action-item p { margin: 2px 0; }
-                    .chart-placeholder { display: none; } /* Hide chart placeholder in print */
-                    .chart-container { display: block; text-align: center; margin-bottom: 30px; } /* Show chart container */
-                    /* Basic Table Styling */
+                    .category-scores-display { margin-bottom: 30px; } /* Added margin for category display */
+                    /* Table Styling */
                     table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-                    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 0.9em; }
-                    th { background-color: #f2f2f2; color: #333; }
+                    th, td { border: 1px solid #ddd; padding: 10px 12px; /* Increased padding */ text-align: left; font-size: 0.9em; }
+                    th { background-color: #f2f2f2; color: #333; font-weight: bold; }
                     td span { margin-left: 5px; }
                      @media print {
-                        body { margin: 0; color: #000; } /* Ensure black text for print */
+                        body { margin: 0; color: #000; -webkit-print-color-adjust: exact; print-color-adjust: exact; } /* Ensure black text & colors */
                         .no-print { display: none; } /* Hide buttons */
                         .print-container { border: none; padding: 0; box-shadow: none; }
                         .section { border: none; padding: 0; border-radius: 0; margin-bottom: 20px; background-color: transparent; }
@@ -94,15 +69,20 @@ export const SummaryDisplay: React.FC = () => {
                         h3 { color: #000 !important; }
                         .category-summary li { border-color: #ccc; }
                         .item-score { border-left-color: #ccc; }
-                         /* Attempt to include chart - might not work perfectly */
-                        .chart-container svg { max-width: 100% !important; height: auto !important; }
+                        /* Ensure progress bars print colors */
+                        .progress-indicator-custom { background-color: var(--progress-color) !important; }
+                        progress { color: var(--progress-color) !important; } /* Attempt for native progress */
+                        table { page-break-inside: auto; }
+                        tr { page-break-inside: avoid; page-break-after: auto; }
+                        thead { display: table-header-group; } /* Repeat header on new pages */
+                        tfoot { display: table-footer-group; }
                      }
                 </style>
               </head>
               <body>
                 <div class="print-container">
                     <h1>Resumo da Roda do Bem-Estar</h1>
-                    ${printContents.replace('<div class="chart-container', '<div class="chart-container')}
+                    ${printContents}
                  </div>
               </body>
               </html>
@@ -118,32 +98,10 @@ export const SummaryDisplay: React.FC = () => {
 
 
   const handleRestart = () => {
-     setAssessmentData({
-        userInfo: null,
-        itemScores: wellbeingItems.map(item => ({ itemId: item.id, currentScore: null, desiredScore: null })), // Reset item scores
-        improvementItems: [],
-        stage: 'userInfo',
-     });
+     resetAssessment(); // Use the reset function from context
   };
 
-
-   const CustomTooltip = ({ active, payload, label }: any) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload as ChartData;
-      const currentVal = payload.find((p: any) => p.dataKey === 'current')?.value;
-      const desiredVal = payload.find((p: any) => p.dataKey === 'desired')?.value;
-
-      return (
-        <div className="bg-background border border-border rounded-md shadow-lg p-3 text-sm">
-          <p className="font-semibold text-primary">{label}</p>
-          {currentVal !== null && <p className="mt-1" style={{ color: payload.find((p: any) => p.dataKey === 'current')?.color }}>Atual: <span className="font-medium">{currentVal}</span></p>}
-          {desiredVal !== null && <p style={{ color: payload.find((p: any) => p.dataKey === 'desired')?.color }}>Desejado: <span className="font-medium">{desiredVal}</span></p>}
-        </div>
-      );
-    }
-    return null;
-  };
-
+   // Removed CustomTooltip as the chart is replaced by CategoryScoresDisplay
 
   if (!isClient) {
     return <Card className="w-full max-w-4xl"><CardContent><p>Carregando resumo...</p></CardContent></Card>;
@@ -167,29 +125,13 @@ export const SummaryDisplay: React.FC = () => {
            </div>
          )}
 
-        {/* Scores Summary Section - Using Bar Chart for Categories */}
-         <div className="scores-summary section">
-           <h2 className="text-xl font-semibold mb-4">Médias por Categoria</h2>
-           <div className="chart-container h-64 md:h-80"> {/* Keep chart container */}
-              {chartData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={chartData} margin={{ top: 5, right: 0, left: -20, bottom: 5 }}> {/* Adjust margins */}
-                          <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} />
-                          <YAxis domain={[0, 10]} tick={{ fontSize: 11 }}/>
-                          <Tooltip content={<CustomTooltip />} cursor={{ fill: 'hsla(var(--muted), 0.3)' }}/>
-                          <Legend wrapperStyle={{ fontSize: '12px' }} />
-                          <Bar dataKey="current" name="Média Atual" fill="hsla(var(--chart-1), 0.7)" radius={[4, 4, 0, 0]} barSize={20}>
-                               <LabelList dataKey="current" position="top" fontSize={10} formatter={(val: number | null) => val?.toFixed(1) ?? ''}/>
-                          </Bar>
-                          <Bar dataKey="desired" name="Média Desejada" fill="hsla(var(--chart-2), 0.7)" radius={[4, 4, 0, 0]} barSize={20}>
-                               <LabelList dataKey="desired" position="top" fontSize={10} formatter={(val: number | null) => val?.toFixed(1) ?? ''}/>
-                          </Bar>
-                      </BarChart>
-                  </ResponsiveContainer>
-               ) : (
-                    <p className="text-muted-foreground text-center chart-placeholder">Calculando médias...</p>
-               )}
-           </div>
+         {/* Category Scores Display Section - Replaced Chart */}
+         <div className="category-scores-display section">
+             <h2 className="text-xl font-semibold mb-4">Percentuais por Categoria</h2>
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-6"> {/* Grid layout for scores */}
+                <CategoryScoresDisplay scoreType="current" />
+                <CategoryScoresDisplay scoreType="desired" />
+             </div>
          </div>
 
 
@@ -197,17 +139,19 @@ export const SummaryDisplay: React.FC = () => {
           <div className="item-scores section">
                <h2 className="text-xl font-semibold mb-4">Pontuações Detalhadas por Item</h2>
                <div className="overflow-x-auto">
-                   <table>
-                       <thead>
-                           <tr>
-                               <th>Categoria</th>
-                               <th>Item</th>
-                               <th>Atual</th>
-                               <th>Desejada</th>
-                               <th>Diferença</th>
-                           </tr>
-                       </thead>
-                       <tbody>
+                   {/* Use ShadCN Table components */}
+                   <Table>
+                       <TableHeader>
+                           <TableRow>
+                               {/* Added explicit px-6 and py-3 for consistent padding */}
+                               <TableHead className="px-4 sm:px-6 py-3 w-[150px]">Categoria</TableHead>
+                               <TableHead className="px-4 sm:px-6 py-3">Item</TableHead>
+                               <TableHead className="px-4 sm:px-6 py-3 text-center w-[100px]">Atual</TableHead>
+                               <TableHead className="px-4 sm:px-6 py-3 text-center w-[100px]">Desejada</TableHead>
+                               <TableHead className="px-4 sm:px-6 py-3 text-center w-[100px]">Diferença</TableHead>
+                           </TableRow>
+                       </TableHeader>
+                       <TableBody>
                            {wellbeingItems.map(item => {
                                const score = itemScores.find(s => s.itemId === item.id);
                                const category = getCategoryForItem(item.id);
@@ -218,26 +162,27 @@ export const SummaryDisplay: React.FC = () => {
                                const diffSign = difference === null ? '' : difference > 0 ? '+' : '';
 
                                return (
-                                   <tr key={item.id}>
-                                       <td style={{ color: category?.color }}>{category?.name ?? 'N/A'}</td>
-                                       <td>{item.name}</td>
-                                       <td>{current ?? 'N/A'}</td>
-                                       <td>{desired ?? 'N/A'}</td>
-                                       <td>
+                                   <TableRow key={item.id}>
+                                       {/* Added explicit px-6 and py-4 */}
+                                       <TableCell className="px-4 sm:px-6 py-4 font-medium" style={{ color: category?.color }}>{category?.name ?? 'N/A'}</TableCell>
+                                       <TableCell className="px-4 sm:px-6 py-4">{item.name}</TableCell>
+                                       <TableCell className="px-4 sm:px-6 py-4 text-center">{current ?? 'N/A'}</TableCell>
+                                       <TableCell className="px-4 sm:px-6 py-4 text-center">{desired ?? 'N/A'}</TableCell>
+                                       <TableCell className="px-4 sm:px-6 py-4 text-center">
                                            {difference !== null ? (
-                                               <span className={`font-medium ${diffColor} flex items-center`}>
+                                               <span className={cn(`font-medium ${diffColor} flex items-center justify-center`)}>
                                                    {diffSign}{difference}
                                                     {difference !== 0 && <TrendingUp className="w-3 h-3 ml-1"/>}
                                                </span>
                                            ) : (
                                                'N/A'
                                            )}
-                                       </td>
-                                   </tr>
+                                       </TableCell>
+                                   </TableRow>
                                );
                            })}
-                       </tbody>
-                   </table>
+                       </TableBody>
+                   </Table>
                </div>
            </div>
 

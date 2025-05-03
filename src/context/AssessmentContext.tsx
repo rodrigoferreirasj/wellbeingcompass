@@ -5,59 +5,74 @@ import React, { createContext, useContext, useState, ReactNode, useCallback, Dis
 import type {
   AssessmentData,
   UserInfo,
-  ItemScore, // Changed
-  ImprovementItem, // Changed
+  ItemScore,
+  ImprovementItem,
   AssessmentStage,
   WellbeingCategory,
   WellbeingItem,
   ActionItem
 } from '@/types/assessment';
-import { initialItemScores, wellbeingCategories, wellbeingItems, getCategoryForItem, getItemDetails } from '@/types/assessment'; // Updated imports
+import { initialItemScores, wellbeingCategories, wellbeingItems, getCategoryForItem, getItemDetails } from '@/types/assessment';
 import { sendUserDataEmail, type UserData } from '@/services/email-service';
 import { useToast } from "@/hooks/use-toast";
-import { format } from 'date-fns'; // For formatting dates in email
-import { ptBR } from 'date-fns/locale'; // For formatting dates in email
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
+// Interface for average scores (kept for potential internal use or chart)
 interface CategoryScore {
   categoryId: string;
   categoryName: string;
+  categoryColor: string; // Added color
   currentAverage: number | null;
   desiredAverage: number | null;
 }
+
+// Interface for percentage scores
+interface CategoryPercentage {
+  categoryId: string;
+  categoryName: string;
+  categoryColor: string; // Added color
+  currentPercentage: number | null;
+  desiredPercentage: number | null;
+}
+
 interface AssessmentContextProps {
   assessmentData: AssessmentData;
   setAssessmentData: Dispatch<SetStateAction<AssessmentData>>;
   updateUserInfo: (info: UserInfo) => void;
-  updateItemScore: (itemId: string, scoreType: 'currentScore' | 'desiredScore', score: number) => void; // Renamed
-  selectImprovementItem: (itemId: string) => void; // Renamed
-  removeImprovementItem: (itemId: string) => void; // Renamed
+  updateItemScore: (itemId: string, scoreType: 'currentScore' | 'desiredScore', score: number) => void;
+  selectImprovementItem: (itemId: string) => void;
+  removeImprovementItem: (itemId: string) => void;
   updateActionItem: (itemId: string, actionIndex: number, text: string) => void;
   updateActionDate: (itemId: string, actionIndex: number, date: Date | null) => void;
-  // addActionItem: (itemId: string) => void; // Keep if needed, but might be handled by initialization
-  removeActionItem: (itemId: string, actionIndex: number) => void; // Clears action
+  removeActionItem: (itemId: string, actionIndex: number) => void;
   goToStage: (stage: AssessmentStage) => void;
   submitAssessment: () => Promise<void>;
-  isItemSelectedForImprovement: (itemId: string) => boolean; // Renamed
-  calculateCategoryScores: () => CategoryScore[]; // New function
-  getActionsForItem: (itemId: string) => ActionItem[]; // New helper
+  isItemSelectedForImprovement: (itemId: string) => boolean;
+  calculateCategoryScores: () => CategoryScore[]; // Calculates averages
+  calculateCategoryPercentages: () => CategoryPercentage[]; // Calculates percentages
+  getActionsForItem: (itemId: string) => ActionItem[];
+  resetAssessment: () => void; // Added reset function
 }
 
 const AssessmentContext = createContext<AssessmentContextProps | undefined>(undefined);
 
+const initialAssessmentState: AssessmentData = {
+  userInfo: null,
+  itemScores: initialItemScores.map(item => ({ ...item })), // Deep copy initial scores
+  improvementItems: [],
+  stage: 'userInfo',
+};
+
+
 export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
   const { toast } = useToast();
-  const [assessmentData, setAssessmentData] = useState<AssessmentData>({
-    userInfo: null,
-    itemScores: initialItemScores, // Use initialItemScores
-    improvementItems: [], // Use improvementItems
-    stage: 'userInfo',
-  });
+  const [assessmentData, setAssessmentData] = useState<AssessmentData>(initialAssessmentState);
 
   const updateUserInfo = useCallback((info: UserInfo) => {
     setAssessmentData(prev => ({ ...prev, userInfo: info, stage: 'currentScore' }));
   }, []);
 
-  // Renamed from updateScore to updateItemScore
   const updateItemScore = useCallback((itemId: string, scoreType: 'currentScore' | 'desiredScore', score: number) => {
     setAssessmentData(prev => ({
       ...prev,
@@ -67,34 +82,28 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
     }));
   }, []);
 
-  // Renamed from selectImprovementArea
  const selectImprovementItem = useCallback((itemId: string) => {
     setAssessmentData(prev => {
-        // Limit to 3 items - Check if item already exists
-      if (prev.improvementItems.length >= 3 || prev.improvementItems.some(ii => ii.itemId === itemId)) {
-         if (prev.improvementItems.some(ii => ii.itemId === itemId)) {
-             // If already selected, maybe do nothing or provide feedback?
-             // toast({ title: "Item já selecionado", description: `${getItemDetails(itemId)?.name} já está na sua lista.` });
-         } else {
-             toast({ title: "Limite Atingido", description: "Você já selecionou 3 itens para melhorar.", variant: "destructive" });
-         }
-        return prev;
+      if (prev.improvementItems.some(ii => ii.itemId === itemId)) {
+         // Already selected, do nothing or provide feedback (handled in component)
+         return prev;
+      }
+      if (prev.improvementItems.length >= 3) {
+         toast({ title: "Limite Atingido", description: "Você já selecionou 3 itens para melhorar.", variant: "destructive" });
+         return prev; // Don't add if limit reached
       }
       const newItem: ImprovementItem = {
         itemId: itemId,
-        // Initialize with 3 empty action slots
         actions: Array(3).fill(null).map((_, index) => ({ id: `${itemId}-action-${index}-${Date.now()}`, text: '', completionDate: null })),
       };
+      toast({ title: `Item "${getItemDetails(itemId)?.name}" selecionado para melhoria.` });
       return {
         ...prev,
         improvementItems: [...prev.improvementItems, newItem],
       };
     });
-     toast({ title: `Item "${getItemDetails(itemId)?.name}" selecionado para melhoria.` });
   }, [toast]);
 
-
-  // Renamed from removeImprovementArea
   const removeImprovementItem = useCallback((itemId: string) => {
     setAssessmentData(prev => ({
       ...prev,
@@ -103,17 +112,14 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
      toast({ title: `Item "${getItemDetails(itemId)?.name}" removido da seleção.` });
   }, [toast]);
 
-  // Renamed from isAreaSelectedForImprovement
   const isItemSelectedForImprovement = useCallback((itemId: string): boolean => {
     return assessmentData.improvementItems.some(ii => ii.itemId === itemId);
   }, [assessmentData.improvementItems]);
-
 
    const getActionsForItem = useCallback((itemId: string): ActionItem[] => {
        const improvementItem = assessmentData.improvementItems.find(ii => ii.itemId === itemId);
        return improvementItem ? improvementItem.actions : [];
    }, [assessmentData.improvementItems]);
-
 
   const updateActionItem = useCallback((itemId: string, actionIndex: number, text: string) => {
     setAssessmentData(prev => ({
@@ -147,11 +153,6 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
     }));
   }, []);
 
-
-  // No longer needed if always 3 slots? If enabling add, implement here.
-  // const addActionItem = useCallback((itemId: string) => {}, []);
-
-  // Renamed from removeActionItem, clears action text/date
   const removeActionItem = useCallback((itemId: string, actionIndex: number) => {
        setAssessmentData(prev => ({
         ...prev,
@@ -160,7 +161,7 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
             ? {
                 ...ii,
                 actions: ii.actions.map((action, index) =>
-                  index === actionIndex ? { ...action, text: '', completionDate: null } : action // Clear the specific action
+                  index === actionIndex ? { ...action, text: '', completionDate: null } : action
                 ),
               }
             : ii
@@ -169,15 +170,13 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
        toast({ title: "Ação Limpa", description: "O texto e a data da ação foram removidos." });
   }, [toast]);
 
-
   const goToStage = useCallback((stage: AssessmentStage) => {
-     // Adjust stage names if needed, e.g., 'selectAreas' -> 'selectItems'
-     const correctedStage = stage === 'selectAreas' ? 'selectItems' : stage;
-     setAssessmentData(prev => ({ ...prev, stage: correctedStage }));
+     // Ensure stage names are correct if they were changed (e.g., 'selectAreas' -> 'selectItems')
+     // const correctedStage = stage === 'selectAreas' ? 'selectItems' : stage;
+     setAssessmentData(prev => ({ ...prev, stage: stage }));
   }, []);
 
-
-  // New function to calculate average scores per category
+  // Calculates average scores per category
   const calculateCategoryScores = useCallback((): CategoryScore[] => {
     return wellbeingCategories.map(category => {
       const itemsInCategory = wellbeingItems.filter(item => item.categoryId === category.id);
@@ -199,23 +198,61 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
       return {
         categoryId: category.id,
         categoryName: category.name,
-        currentAverage: currentAverage !== null ? parseFloat(currentAverage.toFixed(1)) : null, // Rounded to 1 decimal
-        desiredAverage: desiredAverage !== null ? parseFloat(desiredAverage.toFixed(1)) : null, // Rounded to 1 decimal
+        categoryColor: category.color, // Include color
+        currentAverage: currentAverage, // Keep raw average
+        desiredAverage: desiredAverage, // Keep raw average
       };
     });
   }, [assessmentData.itemScores]);
 
+  // Calculates percentage scores per category
+  const calculateCategoryPercentages = useCallback((): CategoryPercentage[] => {
+    return wellbeingCategories.map(category => {
+        const itemsInCategory = wellbeingItems.filter(item => item.categoryId === category.id);
+        const itemScoresInCategory = assessmentData.itemScores.filter(score =>
+            itemsInCategory.some(item => item.id === score.itemId)
+        );
 
-  // Updated formatAssessmentResults for items and categories
+        const maxScorePerItem = 10;
+        const totalPossibleScore = itemsInCategory.length * maxScorePerItem;
+
+        const validCurrentScores = itemScoresInCategory.map(s => s.currentScore).filter(s => s !== null) as number[];
+        const validDesiredScores = itemScoresInCategory.map(s => s.desiredScore).filter(s => s !== null) as number[];
+
+        // Calculate sum only if there are valid scores, otherwise sum is 0
+        const currentSum = validCurrentScores.length > 0 ? validCurrentScores.reduce((sum, score) => sum + score, 0) : 0;
+        const desiredSum = validDesiredScores.length > 0 ? validDesiredScores.reduce((sum, score) => sum + score, 0) : 0;
+
+        // Calculate percentage only if total possible score is greater than 0
+        const currentPercentage = totalPossibleScore > 0 && validCurrentScores.length > 0
+            ? (currentSum / totalPossibleScore) * 100
+            : null;
+        const desiredPercentage = totalPossibleScore > 0 && validDesiredScores.length > 0
+            ? (desiredSum / totalPossibleScore) * 100
+            : null;
+
+
+        return {
+            categoryId: category.id,
+            categoryName: category.name,
+            categoryColor: category.color, // Include color
+            currentPercentage: currentPercentage,
+            desiredPercentage: desiredPercentage,
+        };
+    });
+ }, [assessmentData.itemScores]);
+
+
+  // Updated formatAssessmentResults to include percentages
   const formatAssessmentResults = useCallback((): string => {
     let resultString = "Resultados da Roda do Bem-Estar:\n\n";
-    const categoryScores = calculateCategoryScores();
+    const categoryPercentages = calculateCategoryPercentages(); // Get percentages
 
-    resultString += "--- Médias por Categoria ---\n";
-    categoryScores.forEach(catScore => {
-        resultString += `${catScore.categoryName}:\n`;
-        resultString += `  - Média Atual: ${catScore.currentAverage ?? 'N/A'}\n`;
-        resultString += `  - Média Desejada: ${catScore.desiredAverage ?? 'N/A'}\n\n`;
+    resultString += "--- Percentuais por Categoria ---\n";
+    categoryPercentages.forEach(catPerc => {
+        resultString += `${catPerc.categoryName}:\n`;
+        resultString += `  - Percentual Atual: ${catPerc.currentPercentage !== null ? catPerc.currentPercentage.toFixed(0) + '%' : 'N/A'}\n`;
+        resultString += `  - Percentual Desejado: ${catPerc.desiredPercentage !== null ? catPerc.desiredPercentage.toFixed(0) + '%' : 'N/A'}\n\n`;
     });
 
     resultString += "--- Pontuações por Item ---\n";
@@ -230,10 +267,9 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
     });
 
     return resultString;
-  }, [assessmentData.itemScores, calculateCategoryScores]);
+  }, [assessmentData.itemScores, calculateCategoryPercentages]); // Use percentage function
 
 
-   // Updated formatActionPlan for items
   const formatActionPlan = useCallback((): string => {
      if (assessmentData.improvementItems.length === 0) {
         return "Nenhum item selecionado para melhoria ou plano de ação definido.\n";
@@ -245,7 +281,6 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
       const category = item ? getCategoryForItem(item.id) : undefined;
       planString += `Item: ${item?.name} (${category?.name})\n`;
       impItem.actions.forEach((action, index) => {
-        // Only include actions that have text or a date
         if (action.text.trim() !== '' || action.completionDate) {
             planString += `  Ação ${index + 1}: ${action.text || '(Ação não definida)'}\n`;
             planString += `    Data de Conclusão: ${action.completionDate ? format(action.completionDate, 'dd/MM/yyyy', { locale: ptBR }) : '(Data não definida)'}\n`;
@@ -257,7 +292,6 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
   }, [assessmentData.improvementItems]);
 
 
-  // Updated submitAssessment validation and data formatting
   const submitAssessment = useCallback(async () => {
      if (!assessmentData.userInfo) {
       toast({ title: "Erro", description: "Informações do usuário estão faltando.", variant: "destructive" });
@@ -268,10 +302,9 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
     const allCurrentScored = assessmentData.itemScores.every(s => s.currentScore !== null);
     const allDesiredScored = assessmentData.itemScores.every(s => s.desiredScore !== null);
     const itemsSelected = assessmentData.improvementItems.length > 0;
-    // Ensure every selected improvement item has at least one action with text and a date
     const actionsDefined = assessmentData.improvementItems.every(ii =>
-      ii.actions.some(a => a.text.trim() !== '' && a.completionDate !== null) && // at least one complete action
-      ii.actions.every(a => a.text.trim() === '' || a.completionDate !== null) // all actions with text have a date
+      ii.actions.some(a => a.text.trim() !== '' && a.completionDate !== null) &&
+      ii.actions.every(a => a.text.trim() === '' || a.completionDate !== null)
     );
 
 
@@ -286,13 +319,12 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
         title: "Informações Incompletas",
         description: description,
         variant: "destructive",
-        duration: 7000, // Longer duration for more text
+        duration: 7000,
       });
 
-      // Guide user to the specific stage
       if (!allCurrentScored) goToStage('currentScore');
       else if (!allDesiredScored) goToStage('desiredScore');
-      else if (!itemsSelected) goToStage('selectItems'); // Updated stage name
+      else if (!itemsSelected) goToStage('selectItems');
       else goToStage('defineActions');
       return;
     }
@@ -300,14 +332,14 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
 
     const userDataToSend: UserData = {
       ...assessmentData.userInfo,
-      assessmentResults: formatAssessmentResults(),
+      assessmentResults: formatAssessmentResults(), // Uses percentages now
       actionPlan: formatActionPlan(),
     };
 
     try {
       // TODO: Replace console.log with actual email sending logic
       // await sendUserDataEmail(userDataToSend);
-      console.log("Dados a serem enviados:", JSON.stringify(userDataToSend, null, 2)); // Pretty print
+      console.log("Dados a serem enviados:", JSON.stringify(userDataToSend, null, 2));
       toast({
         title: "Sucesso!",
         description: "Sua avaliação foi enviada com sucesso. Verifique seu e-mail (simulado).",
@@ -321,24 +353,32 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
         variant: "destructive",
       });
     }
-  }, [assessmentData, formatAssessmentResults, formatActionPlan, goToStage, toast, calculateCategoryScores]); // Added calculateCategoryScores dependency
+  }, [assessmentData, formatAssessmentResults, formatActionPlan, goToStage, toast, calculateCategoryPercentages]);
+
+  // Function to reset the assessment state
+  const resetAssessment = useCallback(() => {
+    setAssessmentData(initialAssessmentState);
+    toast({ title: "Avaliação Reiniciada", description: "Você pode começar uma nova avaliação." });
+  }, [toast]);
 
 
   const value = {
     assessmentData,
     setAssessmentData,
     updateUserInfo,
-    updateItemScore, // Renamed
-    selectImprovementItem, // Renamed
-    removeImprovementItem, // Renamed
+    updateItemScore,
+    selectImprovementItem,
+    removeImprovementItem,
     updateActionItem,
     updateActionDate,
-    removeActionItem, // Function to clear action
+    removeActionItem,
     goToStage,
     submitAssessment,
-    isItemSelectedForImprovement, // Renamed
-    calculateCategoryScores, // Added
-    getActionsForItem, // Added
+    isItemSelectedForImprovement,
+    calculateCategoryScores, // Calculates averages
+    calculateCategoryPercentages, // Calculates percentages
+    getActionsForItem,
+    resetAssessment, // Added reset function
   };
 
   return <AssessmentContext.Provider value={value}>{children}</AssessmentContext.Provider>;
@@ -351,3 +391,4 @@ export const useAssessment = () => {
   }
   return context;
 };
+```

@@ -4,7 +4,7 @@
 import React, { useMemo } from 'react';
 import { useAssessment } from '@/context/AssessmentContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Progress } from '@/components/ui/progress'; // Use Progress for visual representation
+import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 
 interface CategoryScoresDisplayProps {
@@ -12,17 +12,18 @@ interface CategoryScoresDisplayProps {
 }
 
 export const CategoryScoresDisplay: React.FC<CategoryScoresDisplayProps> = ({ scoreType }) => {
-  const { calculateCategoryScores } = useAssessment();
+  const { calculateCategoryPercentages } = useAssessment(); // Use the new percentage calculation function
 
-  const categoryScores = useMemo(() => {
-    return calculateCategoryScores();
-  }, [calculateCategoryScores]);
+  // Use the percentage calculation function
+  const categoryPercentages = useMemo(() => {
+    return calculateCategoryPercentages();
+  }, [calculateCategoryPercentages]);
 
-  const scoreKey = scoreType === 'current' ? 'currentAverage' : 'desiredAverage';
-  const title = scoreType === 'current' ? 'Médias Atuais por Categoria' : 'Médias Desejadas por Categoria';
+  const percentageKey = scoreType === 'current' ? 'currentPercentage' : 'desiredPercentage';
+  const title = scoreType === 'current' ? 'Percentual Atual por Categoria' : 'Percentual Desejado por Categoria';
 
-  // Check if any scores are available for the current type
-  const hasScores = categoryScores.some(score => score[scoreKey] !== null);
+  // Check if any percentages are available for the current type
+  const hasPercentages = categoryPercentages.some(score => score[percentageKey] !== null);
 
   return (
     <Card className="w-full shadow-sm">
@@ -30,10 +31,9 @@ export const CategoryScoresDisplay: React.FC<CategoryScoresDisplayProps> = ({ sc
         <CardTitle className="text-lg text-center text-primary">{title}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {categoryScores.length > 0 && hasScores ? (
-          categoryScores.map(score => {
-            const average = score[scoreKey];
-            const percentage = average !== null ? (average / 10) * 100 : 0; // Calculate percentage for progress bar
+        {categoryPercentages.length > 0 && hasPercentages ? (
+          categoryPercentages.map(score => {
+            const percentage = score[percentageKey];
 
             return (
               <div key={score.categoryId} className="flex flex-col space-y-1">
@@ -41,15 +41,15 @@ export const CategoryScoresDisplay: React.FC<CategoryScoresDisplayProps> = ({ sc
                   <span className="font-medium" style={{ color: score.categoryColor }}>
                     {score.categoryName}
                   </span>
-                  <span className={cn("font-semibold", average === null ? "text-muted-foreground" : "text-foreground")}>
-                    {average !== null ? average.toFixed(1) : 'N/A'}
+                  <span className={cn("font-semibold", percentage === null ? "text-muted-foreground" : "text-foreground")}>
+                    {percentage !== null ? `${percentage.toFixed(0)}%` : 'N/A'} {/* Display as percentage */}
                   </span>
                 </div>
                 <Progress
-                    value={percentage}
+                    value={percentage ?? 0} // Pass percentage directly to Progress
                     className="h-2"
-                    style={{ '--progress-color': score.categoryColor } as React.CSSProperties} // Custom property for color
-                    indicatorClassName={average === null ? 'bg-muted' : ''} // Use muted if no score
+                    style={{ '--progress-color': score.categoryColor } as React.CSSProperties}
+                    indicatorClassName={cn(percentage === null ? 'bg-muted' : 'progress-indicator-custom')} // Apply custom class conditionally
                  />
               </div>
             );
@@ -57,20 +57,11 @@ export const CategoryScoresDisplay: React.FC<CategoryScoresDisplayProps> = ({ sc
         ) : (
           <p className="text-center text-muted-foreground text-sm">
             {scoreType === 'current'
-              ? 'Avalie os itens no gráfico para ver as médias atuais.'
-              : 'Defina as notas desejadas no gráfico para ver as médias.'}
+              ? 'Avalie os itens no gráfico para ver os percentuais atuais.'
+              : 'Defina as notas desejadas no gráfico para ver os percentuais.'}
           </p>
         )}
       </CardContent>
     </Card>
   );
 };
-
-// Add custom progress indicator styling in globals.css if needed, or use inline style if simple enough
-// Example for globals.css (if needed for more complex styling or themes):
-/*
-.progress-indicator-custom {
-  background-color: var(--progress-color, hsl(var(--primary)));
-}
-*/
-// Update Progress component to accept indicatorClassName
