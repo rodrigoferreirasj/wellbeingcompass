@@ -1,3 +1,4 @@
+
 export interface UserInfo {
   fullName: string;
   jobTitle: string;
@@ -33,7 +34,7 @@ export interface ActionItem {
 
 export interface ImprovementItem {
   itemId: string;
-  actions: ActionItem[];
+  actions: ActionItem[]; // Starts with one, user can add more
 }
 
 // Stages might need adjustment based on new flow
@@ -77,6 +78,12 @@ export const wellbeingItems: WellbeingItem[] = [
 ];
 
 
+// Helper to generate unique action IDs
+export const generateActionId = (itemId: string, index: number): string => {
+    return `${itemId}-action-${index}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+};
+
+
 // Initial state helper for item scores - derived automatically from the ordered wellbeingItems
 export const initialItemScores: ItemScore[] = wellbeingItems.map(item => ({
   itemId: item.id,
@@ -94,3 +101,4 @@ export const getCategoryForItem = (itemId: string): WellbeingCategory | undefine
 export const getItemDetails = (itemId: string): WellbeingItem | undefined => {
     return wellbeingItems.find(i => i.id === itemId);
 };
+```

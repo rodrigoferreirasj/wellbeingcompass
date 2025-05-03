@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useCallback, Dispatch, SetStateAction } from 'react';
@@ -12,7 +13,7 @@ import type {
   WellbeingItem,
   ActionItem
 } from '@/types/assessment';
-import { initialItemScores, wellbeingCategories, wellbeingItems, getCategoryForItem, getItemDetails } from '@/types/assessment';
+import { initialItemScores, wellbeingCategories, wellbeingItems, getCategoryForItem, getItemDetails, generateActionId } from '@/types/assessment'; // Added generateActionId
 import { sendUserDataEmail, type UserData } from '@/services/email-service'; // Assuming this path is correct
 import { useToast } from "@/hooks/use-toast";
 import { format } from 'date-fns';
@@ -46,6 +47,7 @@ interface AssessmentContextProps {
   updateActionItem: (itemId: string, actionIndex: number, text: string) => void;
   updateActionDate: (itemId: string, actionIndex: number, date: Date | null) => void;
   removeActionItem: (itemId: string, actionIndex: number) => void; // For clearing text/date
+  addActionItemSlot: (itemId: string) => void; // Added function to add new action slot
   goToStage: (stage: AssessmentStage) => void;
   submitAssessment: () => Promise<void>; // This transitions to summary
   sendResultsToCoach: () => Promise<void>; // New function to send email
@@ -97,9 +99,10 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
          limitReached = true;
          return prev; // Limit reached
       }
+      // Start with one action item when selecting
       const newItem: ImprovementItem = {
         itemId: itemId,
-        actions: Array(3).fill(null).map((_, index) => ({ id: `${itemId}-action-${index}-${Date.now()}`, text: '', completionDate: null })),
+        actions: [ { id: generateActionId(itemId, 0), text: '', completionDate: null } ],
       };
       itemSelected = true; // Mark item as selected in this update cycle
       return {
@@ -110,11 +113,19 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
 
     // Separate toast logic after state update attempt
     if (limitReached) {
-        toast({ title: "Limite Atingido", description: "Você já selecionou 3 itens para melhorar.", variant: "destructive" });
+        try {
+            toast({ title: "Limite Atingido", description: "Você já selecionou 3 itens para melhorar.", variant: "destructive" });
+        } catch (e) { console.error("Toast failed:", e); }
     } else if (itemSelected) { // Only toast if it was actually selected in this call
-        toast({ title: `Item "${getItemDetails(itemId)?.name}" selecionado para melhoria.` });
+        // Use try-catch block for safer toast call if needed
+        try {
+             const itemName = getItemDetails(itemId)?.name ?? 'Item';
+             toast({ title: `"${itemName}" selecionado para melhoria.` });
+        } catch (e) {
+             console.error("Toast notification failed:", e);
+        }
     }
- }, [toast]); // toast is a stable dependency
+ }, [toast]);
 
   const removeImprovementItem = useCallback((itemId: string) => {
      let itemRemoved = false;
@@ -132,9 +143,15 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
 
       // Separate toast logic after state update attempt
      if (itemRemoved) {
-        toast({ title: `Item "${getItemDetails(itemId)?.name}" removido da seleção.` });
+        // Use try-catch block for safer toast call if needed
+        try {
+            const itemName = getItemDetails(itemId)?.name ?? 'Item';
+            toast({ title: `"${itemName}" removido da seleção.` });
+        } catch (e) {
+            console.error("Toast notification failed:", e);
+        }
      }
-  }, [toast]); // toast is a stable dependency
+  }, [toast]);
 
   const isItemSelectedForImprovement = useCallback((itemId: string): boolean => {
     return assessmentData.improvementItems.some(ii => ii.itemId === itemId);
@@ -177,25 +194,75 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
     }));
   }, []);
 
-  // Clears the specific action item's text and date
+  // Remove action by index (retains order)
   const removeActionItem = useCallback((itemId: string, actionIndex: number) => {
+       let actionWasRemoved = false;
        setAssessmentData(prev => ({
         ...prev,
-        improvementItems: prev.improvementItems.map(ii =>
-          ii.itemId === itemId
-            ? {
-                ...ii,
-                actions: ii.actions.map((action, index) =>
-                  // Reset the specific action to its initial empty state
-                  index === actionIndex ? { ...action, text: '', completionDate: null } : action
-                ),
+        improvementItems: prev.improvementItems.map(ii => {
+          if (ii.itemId === itemId) {
+              // Prevent removing the last action item
+              if (ii.actions.length <= 1) {
+                  // Instead of removing, clear the last item
+                  return {
+                      ...ii,
+                      actions: [{ ...ii.actions[0], text: '', completionDate: null }]
+                  };
               }
-            : ii
-        ),
+              // Remove the action at the specified index
+              const updatedActions = ii.actions.filter((_, index) => index !== actionIndex);
+              actionWasRemoved = true;
+              return { ...ii, actions: updatedActions };
+          }
+          return ii;
+        }),
       }));
        // Call toast *after* the state update
-       toast({ title: "Ação Limpa", description: "O texto e a data da ação foram removidos." });
-  }, [toast]); // Ensure toast is a stable dependency
+       // Use try-catch block for safer toast call if needed
+        if (actionWasRemoved) {
+             try {
+                 toast({ title: "Ação Removida", description: "A ação selecionada foi removida." });
+             } catch (e) {
+                 console.error("Toast notification failed:", e);
+             }
+        } else {
+            try {
+                 toast({ title: "Ação Limpa", description: "O conteúdo da ação foi limpo." });
+            } catch (e) {
+                 console.error("Toast notification failed:", e);
+            }
+        }
+  }, [toast]);
+
+
+  // Function to add a new empty action slot to an improvement item
+  const addActionItemSlot = useCallback((itemId: string) => {
+      setAssessmentData(prev => ({
+          ...prev,
+          improvementItems: prev.improvementItems.map(ii => {
+              if (ii.itemId === itemId) {
+                  const nextIndex = ii.actions.length; // Index for the new action
+                  const newAction: ActionItem = {
+                      id: generateActionId(itemId, nextIndex),
+                      text: '',
+                      completionDate: null,
+                  };
+                  return {
+                      ...ii,
+                      actions: [...ii.actions, newAction], // Add the new empty action
+                  };
+              }
+              return ii;
+          }),
+      }));
+      // Optional: Toast notification
+       try {
+            toast({ title: "Ação Adicionada", description: "Um novo campo de ação foi adicionado." });
+       } catch (e) {
+            console.error("Toast notification failed:", e);
+       }
+  }, [toast]);
+
 
 
   const goToStage = useCallback((stage: AssessmentStage) => {
@@ -328,28 +395,28 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
    // Internal validation function
   const validateAssessmentCompletion = useCallback(() => {
     if (!assessmentData.userInfo) {
-        return { valid: false, message: "Informações do usuário estão faltando.", stage: 'userInfo' };
+        return { valid: false, message: "Informações do usuário estão faltando.", stage: 'userInfo' as AssessmentStage };
     }
     const allCurrentScored = assessmentData.itemScores.every(s => s.currentScore !== null);
     if (!allCurrentScored) {
-        return { valid: false, message: "Avalie todos os itens no estágio 'Atual'.", stage: 'currentScore' };
+        return { valid: false, message: "Avalie todos os itens no estágio 'Atual'.", stage: 'currentScore' as AssessmentStage };
     }
     const allDesiredScored = assessmentData.itemScores.every(s => s.desiredScore !== null);
     if (!allDesiredScored) {
-        return { valid: false, message: "Defina notas desejadas para todos os itens.", stage: 'desiredScore' };
+        return { valid: false, message: "Defina notas desejadas para todos os itens.", stage: 'desiredScore' as AssessmentStage };
     }
     const itemsSelected = assessmentData.improvementItems.length > 0;
     if (!itemsSelected) {
-        return { valid: false, message: "Selecione pelo menos um item para melhorar.", stage: 'selectItems' };
+        return { valid: false, message: "Selecione pelo menos um item para melhorar.", stage: 'selectItems' as AssessmentStage };
     }
-    const actionsDefined = assessmentData.improvementItems.every(ii =>
-      ii.actions.some(a => a.text.trim() !== '' && a.completionDate !== null) &&
-      ii.actions.every(a => a.text.trim() === '' || a.completionDate !== null)
-    );
+     // Updated validation: At least one action must have text AND date for EACH selected item
+     const actionsDefined = assessmentData.improvementItems.every(ii =>
+        ii.actions.some(a => a.text.trim() !== '' && a.completionDate !== null)
+     );
     if (!actionsDefined) {
-        return { valid: false, message: "Para cada item selecionado, defina pelo menos uma ação completa (texto e data). Certifique-se de que todas as ações com texto tenham uma data.", stage: 'defineActions' };
+        return { valid: false, message: "Para cada item selecionado, defina pelo menos uma ação completa (texto e data).", stage: 'defineActions' as AssessmentStage };
     }
-    return { valid: true };
+    return { valid: true, message: "Assessment complete and valid.", stage: null }; // Added stage: null for valid case
   }, [assessmentData]);
 
 
@@ -357,24 +424,28 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
   const submitAssessment = useCallback(async () => {
      const validation = validateAssessmentCompletion();
      if (!validation.valid) {
-        toast({
-            title: "Informações Incompletas",
-            description: validation.message,
-            variant: "destructive",
-            duration: 7000,
-        });
+        try {
+            toast({
+                title: "Informações Incompletas",
+                description: validation.message,
+                variant: "destructive",
+                duration: 7000,
+            });
+        } catch (e) { console.error("Toast failed:", e); }
         if (validation.stage) {
-            goToStage(validation.stage as AssessmentStage);
+            goToStage(validation.stage); // No need to cast if interface includes it
         }
         return;
      }
 
      // If validation passes, simply go to summary
      goToStage('summary');
-     toast({
-        title: "Revisão Pronta",
-        description: "Revise sua avaliação e plano de ação no resumo.",
-     });
+     try {
+         toast({
+            title: "Revisão Pronta",
+            description: "Revise sua avaliação e plano de ação no resumo.",
+         });
+     } catch (e) { console.error("Toast failed:", e); }
 
   }, [validateAssessmentCompletion, goToStage, toast]);
 
@@ -383,14 +454,16 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
    const sendResultsToCoach = useCallback(async () => {
     const validation = validateAssessmentCompletion();
      if (!validation.valid) {
-        toast({
-            title: "Não é possível enviar",
-            description: `Complete a avaliação primeiro. ${validation.message}`,
-            variant: "destructive",
-            duration: 7000,
-        });
+        try {
+            toast({
+                title: "Não é possível enviar",
+                description: `Complete a avaliação primeiro. ${validation.message}`,
+                variant: "destructive",
+                duration: 7000,
+            });
+         } catch (e) { console.error("Toast failed:", e); }
          if (validation.stage) {
-            goToStage(validation.stage as AssessmentStage);
+            goToStage(validation.stage);
         }
         return;
      }
@@ -406,18 +479,23 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
         // Call the actual email sending service
         await sendUserDataEmail(userDataToSend);
 
-        toast({
-          title: "Relatório Enviado!",
-          description: "Seu relatório de avaliação foi enviado para o Coach Rodrigo Ferreira.",
-          duration: 6000,
-        });
+        try {
+            toast({
+              title: "Relatório Enviado!",
+              description: "Seu relatório de avaliação foi enviado para o Coach Rodrigo Ferreira.",
+              duration: 6000,
+            });
+        } catch (e) { console.error("Toast failed:", e); }
+
       } catch (error) {
         console.error("Erro ao enviar relatório por email:", error);
-        toast({
-          title: "Erro ao Enviar",
-          description: "Houve um problema ao enviar seu relatório. Tente novamente mais tarde ou contate o suporte.",
-          variant: "destructive",
-        });
+         try {
+            toast({
+              title: "Erro ao Enviar",
+              description: "Houve um problema ao enviar seu relatório. Tente novamente mais tarde ou contate o suporte.",
+              variant: "destructive",
+            });
+        } catch (e) { console.error("Toast failed:", e); }
       }
 
    }, [assessmentData.userInfo, formatAssessmentResults, formatActionPlan, validateAssessmentCompletion, goToStage, toast]);
@@ -431,7 +509,9 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
         improvementItems: [],
         stage: 'userInfo',
     });
-    toast({ title: "Avaliação Reiniciada", description: "Você pode começar uma nova avaliação." });
+     try {
+        toast({ title: "Avaliação Reiniciada", description: "Você pode começar uma nova avaliação." });
+     } catch (e) { console.error("Toast failed:", e); }
   }, [toast]);
 
 
@@ -444,7 +524,8 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
     removeImprovementItem,
     updateActionItem,
     updateActionDate,
-    removeActionItem, // Function to clear action text/date
+    removeActionItem, // Function to remove action by index
+    addActionItemSlot, // Function to add new action slot
     goToStage,
     submitAssessment, // Moves to summary
     sendResultsToCoach, // Sends email

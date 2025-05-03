@@ -2,17 +2,17 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Sector } from 'recharts'; // Added Sector
 import { useAssessment } from '@/context/AssessmentContext';
 import { wellbeingItems, wellbeingCategories, ItemScore, getCategoryForItem, getItemDetails, WellbeingItem } from '@/types/assessment';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { ArrowRight, ArrowLeft, CheckCircle, Target, Star, TrendingUp } from 'lucide-react';
+import { ArrowRight, ArrowLeft, CheckCircle, Target, Star, TrendingUp, XCircle } from 'lucide-react'; // Added XCircle
 import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
-import { ActionPlan } from './action-plan'; // Assuming ActionPlan is used in 'defineActions' stage now
 import { CategoryScoresDisplay } from './category-scores-display';
+import { Badge } from '@/components/ui/badge'; // Import Badge
 
 interface WellbeingWheelProps {
   scoreType: 'current' | 'desired' | 'select';
@@ -24,11 +24,12 @@ interface PieDataItem extends ItemScore {
   categoryName: string;
   categoryColor: string;
   value: number; // Fixed value for equal slices
-  fillColor: string;
-  displayLabel: string; // Label for inner display (score, check, diff, or name) - Renamed from 'label'
-  nameLabel: string; // Display label for outer name - Keeping for reference, might remove usage
+  fillColor: string; // Base color or selection color
+  displayLabel: string; // Label for inner display (name + diff in select mode)
+  nameLabel: string; // Display label for outer name (not used anymore)
   difference?: number | null;
   order: number;
+  scoreValue: number | null; // The relevant score (current or desired)
   // Recharts injected props
   cx?: number;
   cy?: number;
@@ -39,14 +40,13 @@ interface PieDataItem extends ItemScore {
   endAngle?: number;
   percent?: number;
   payload?: any;
-  // Custom props for positioning - No longer needed for outer labels
-  // labelX?: number;
-  // labelY?: number;
-  // labelAnchor?: 'start' | 'middle' | 'end';
+  // Props for ActiveShape
+  isActive?: boolean; // Indicates if this is the currently rendered active shape
 }
 
 
 const RADIAN = Math.PI / 180;
+const SELECTION_COLOR = 'hsl(var(--destructive))'; // A distinct color for selected items, e.g., destructive color
 
 export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => {
   const {
@@ -63,6 +63,7 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [sliderValue, setSliderValue] = useState<number>(5);
   const [isClient, setIsClient] = useState(false);
+  const [activeIndex, setActiveIndex] = useState<number | null>(null); // For active shape
 
   useEffect(() => {
     setIsClient(true);
@@ -116,10 +117,12 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
              if (isItemSelectedForImprovement(itemId)) {
                 removeImprovementItem(itemId);
                 setSelectedItemId(null); // Deselect after removing
+                setActiveIndex(null); // Deactivate shape
             } else {
                 if (improvementItems.length < 3) {
                     selectImprovementItem(itemId);
                     // Keep it selected visually after adding
+                     setActiveIndex(index); // Keep shape active
                 } else {
                      toast({ title: "Limite Atingido", description: "Você já selecionou 3 itens para melhorar.", variant: "destructive" });
                 }
@@ -127,14 +130,16 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
         } else {
              // If clicking a *different* item, just set it as the currently focused item
              setSelectedItemId(itemId);
+             setActiveIndex(index); // Activate shape
              // Don't toggle selection here, wait for a second click or confirmation
         }
     } else {
          // In scoring modes, clicking always selects the item for scoring
          setSelectedItemId(itemId);
+         setActiveIndex(index); // Activate shape
     }
 
-  }, [isSelectionMode, isItemSelectedForImprovement, removeImprovementItem, improvementItems.length, selectImprovementItem, toast, selectedItemId]); // Added selectedItemId dependency
+  }, [isSelectionMode, isItemSelectedForImprovement, removeImprovementItem, improvementItems.length, selectImprovementItem, toast, selectedItemId]);
 
 
   const handleSliderChange = (value: number[]) => {
@@ -150,88 +155,71 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
         description: `Nota ${sliderValue} salva para ${selectedItemDetails.name}.`,
       });
       setSelectedItemId(null); // Deselect item after confirming score
+      setActiveIndex(null); // Deactivate shape
     }
   };
 
 
-  const calculateFillColor = useCallback((itemScore: ItemScore, defaultColor: string): string => {
-    const baseColor = defaultColor;
+ const calculateFillColor = useCallback((itemScore: ItemScore, defaultColor: string): string => {
     const itemId = itemScore.itemId;
 
-     // Selection Mode Highlighting (overrides other states)
      if (isSelectionMode) {
         if (isItemSelectedForImprovement(itemId)) {
-            return 'hsl(var(--accent))'; // Highlight confirmed selections with accent
+            return SELECTION_COLOR; // Use distinct selection color
         } else if (selectedItemId === itemId) {
-             return 'hsl(var(--ring) / 0.7)'; // Highlight item currently focused for potential selection
+             // Highlight focused item slightly, but not the main selection color yet
+             return defaultColor.replace(/hsl(a?)\(([^)]+)\)/, (match, a, values) => {
+                 const parts = values.split(',');
+                 const lightness = parseFloat(parts[2]);
+                 // Make it slightly brighter or use a subtle overlay effect if needed
+                 return `hsla(${parts[0]}, ${parts[1]}, ${Math.min(100, lightness + 10)}%, ${a ? parts[3] : 0.8})`;
+             });
         } else {
-            // In selection mode, use full opacity if not selected/focused
-             return baseColor;
+             return defaultColor; // Regular category color
         }
     }
 
-    // Scoring Mode Highlighting
-    const scoreKey = scoreType === 'current' ? 'currentScore' : 'desiredScore';
-    const score = itemScore[scoreKey];
+     // Scoring Mode: Base color is always the category color
+     return defaultColor;
 
-    if (selectedItemId === itemId) {
-         return 'hsl(var(--ring))'; // Ring color when actively scoring
-    }
-
-    if (score === null) {
-        return 'hsl(var(--muted))'; // Muted if not scored yet
-    }
-
-    // Opacity based on score
-    const opacity = Math.min(1, Math.max(0.15, (score / 8))); // Adjust opacity range/curve if needed
-
-    try {
-      // Try to parse HSL(A) color to adjust opacity
-      const match = baseColor.match(/hsla?\(\s*(\d+)\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%(?:\s*,\s*([\d.]+))?\s*\)/);
-      if (match) {
-        const [h, s, l] = match.slice(1, 4);
-        const clampedOpacity = Math.max(0, Math.min(1, opacity));
-        return `hsla(${h}, ${s}%, ${l}%, ${clampedOpacity})`;
-      }
-    } catch (e) {
-      console.error("Color conversion error", e);
-    }
-
-    // Fallback to base color if HSL parsing fails
-    return baseColor;
-  }, [isSelectionMode, isItemSelectedForImprovement, scoreType, selectedItemId]);
+  }, [isSelectionMode, isItemSelectedForImprovement, selectedItemId]);
 
 
   const pieData: PieDataItem[] = useMemo(() => {
-    const orderedItems = wellbeingItems; // Use the fixed order
-
-    return orderedItems.map((item, index) => {
+    // Ensure items are consistently ordered based on the predefined wellbeingItems array
+    return wellbeingItems.map((item, index) => {
       const category = getCategoryForItem(item.id);
       const itemScoreData = itemScores.find(s => s.itemId === item.id) || { itemId: item.id, currentScore: null, desiredScore: null };
       const categoryColor = category?.color ?? 'hsl(var(--secondary))';
-      const scoreKey = scoreType === 'current' ? 'currentScore' : 'desiredScore';
+
+      // Determine the score value relevant for the current context (current, desired, or null if not applicable)
+      const scoreKey = scoreType === 'current' ? 'currentScore' : scoreType === 'desired' ? 'desiredScore' : null;
+      const scoreValue = scoreKey ? itemScoreData[scoreKey] : null;
 
       let difference: number | null = null;
       if (itemScoreData.currentScore !== null && itemScoreData.desiredScore !== null) {
         difference = itemScoreData.desiredScore - itemScoreData.currentScore;
       }
 
-      // The inner label will now be the item name
-      const displayLabelValue = item.name;
-      const nameLabelValue = item.name; // Keep for potential tooltip/future use
+      // Display Label: Name + Difference in selection mode
+      let displayLabelValue = item.name;
+      if (isSelectionMode && difference !== null) {
+           displayLabelValue += ` (${difference > 0 ? '+' : ''}${difference})`;
+      }
 
       return {
         ...itemScoreData,
         itemId: item.id,
-        name: item.name,
+        name: item.name, // Keep original name for tooltips/logic
         categoryName: category?.name ?? 'Unknown',
         categoryColor: categoryColor,
         value: 1, // Equal size slice
         fillColor: calculateFillColor(itemScoreData, categoryColor),
-        displayLabel: displayLabelValue, // Use item name for inner display
-        nameLabel: nameLabelValue,
+        displayLabel: displayLabelValue, // Label for display inside slice
+        nameLabel: item.name, // Not currently used for outer labels, kept for potential use
         difference: difference,
-        order: index,
+        order: index, // Use index from the definitive wellbeingItems array
+        scoreValue: scoreValue, // Pass the relevant score for rendering radial fill
       };
     });
   }, [itemScores, scoreType, isSelectionMode, isItemSelectedForImprovement, calculateFillColor]);
@@ -255,7 +243,7 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
       const itemDetails = getItemDetails(data.itemId);
       const currentScore = data.currentScore;
       const desiredScore = data.desiredScore;
-      const difference = currentScore !== null && desiredScore !== null ? desiredScore - currentScore : null;
+      const difference = data.difference; // Already calculated in pieData
 
       return (
         <div className="bg-background border border-border rounded-md shadow-lg p-3 text-sm max-w-xs z-50"> {/* Ensure tooltip is above */}
@@ -275,15 +263,15 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
 
            {/* Selection Mode Tooltip Hints */}
            {isSelectionMode && isItemSelectedForImprovement(data.itemId) && (
-               <p className="mt-2 text-accent font-medium flex items-center"><Star className="w-3 h-3 mr-1 fill-accent" />Selecionado para Melhoria</p>
+               <p className="mt-2 text-destructive font-medium flex items-center"><Star className="w-3 h-3 mr-1 fill-destructive" />Selecionado para Melhoria</p>
            )}
-           {isSelectionMode && !isItemSelectedForImprovement(data.itemId) && improvementItems.length < 3 && selectedItemId === data.itemId && (
+           {isSelectionMode && !isItemSelectedForImprovement(data.itemId) && improvementItems.length < 3 && activeIndex === data.order && ( // Use activeIndex
                <p className="mt-2 text-muted-foreground text-xs italic">Clique novamente para confirmar a seleção.</p>
            )}
-            {isSelectionMode && !isItemSelectedForImprovement(data.itemId) && improvementItems.length < 3 && selectedItemId !== data.itemId && (
+            {isSelectionMode && !isItemSelectedForImprovement(data.itemId) && improvementItems.length < 3 && activeIndex !== data.order && ( // Use activeIndex
                <p className="mt-2 text-muted-foreground text-xs italic">Clique para focar, clique novamente para selecionar.</p>
            )}
-           {isSelectionMode && isItemSelectedForImprovement(data.itemId) && selectedItemId === data.itemId && (
+           {isSelectionMode && isItemSelectedForImprovement(data.itemId) && activeIndex === data.order && ( // Use activeIndex
                 <p className="mt-2 text-muted-foreground text-xs italic">Clique novamente para remover da seleção.</p>
            )}
            {isSelectionMode && !isItemSelectedForImprovement(data.itemId) && improvementItems.length >= 3 && (
@@ -291,10 +279,10 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
            )}
 
            {/* Scoring Mode Tooltip Hints */}
-            {!isSelectionMode && selectedItemId !== data.itemId && data[scoreType === 'current' ? 'currentScore' : 'desiredScore'] === null && (
+            {!isSelectionMode && activeIndex !== data.order && data.scoreValue === null && ( // Use activeIndex and scoreValue
                  <p className="mt-2 text-muted-foreground text-xs italic">Clique para definir a nota {scoreType === 'current' ? 'atual' : 'desejada'}.</p>
             )}
-             {!isSelectionMode && selectedItemId !== data.itemId && data[scoreType === 'current' ? 'currentScore' : 'desiredScore'] !== null && (
+             {!isSelectionMode && activeIndex !== data.order && data.scoreValue !== null && ( // Use activeIndex and scoreValue
                  <p className="mt-2 text-muted-foreground text-xs italic">Clique para editar a nota {scoreType === 'current' ? 'atual' : 'desejada'}.</p>
             )}
         </div>
@@ -303,63 +291,120 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
     return null;
   };
 
-     // Renders the inner item name labels
-     const renderCustomizedNameLabel = useCallback(({ cx, cy, midAngle, innerRadius, outerRadius, payload }: any) => {
-         const entry = payload as PieDataItem;
-         if (!entry || !entry.displayLabel || !midAngle) return null;
 
-         const radius = innerRadius + (outerRadius - innerRadius) * 0.55; // Position slightly outwards from center
-         const x = cx + radius * Math.cos(-midAngle * RADIAN);
-         const y = cy + radius * Math.sin(-midAngle * RADIAN);
+    // Custom Active Shape for Radial Fill Effect and Labels
+    const renderActiveShape = (props: any) => {
+        const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill, payload, scoreValue, order } = props as PieDataItem & { isActive?: boolean }; // Added isActive
 
-         // Basic contrast logic: Determine text color based on fill color's perceived lightness
-         let fillColor = "hsl(var(--foreground))"; // Default to dark text
+        if (!payload) {
+             // Render a simple sector if no payload
+             return <Sector {...props} />;
+         }
+
+        const scorePercentage = (scoreValue ?? 0) / 10; // Score out of 10, default 0 if null
+        const filledOuterRadius = innerRadius + (outerRadius - innerRadius) * scorePercentage;
+
+        // Create a gradient ID based on item ID
+        const gradientId = `gradient-${payload.itemId}`;
+
+         // Determine label color based on fill brightness (simple contrast)
+         let labelColor = "hsl(var(--foreground))"; // Default dark text
          try {
-            // Extract HSL values from the fillColor
-            const match = entry.fillColor.match(/hsla?\(\s*(\d+)\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%(?:\s*,\s*([\d.]+))?\s*\)/);
+            const match = fill.match(/hsla?\(\s*(\d+)\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%(?:\s*,\s*([\d.]+))?\s*\)/);
             if (match) {
                 const lightness = parseFloat(match[3]);
-                const alpha = match[4] ? parseFloat(match[4]) : 1;
-                // If background is dark (low lightness or high opacity on dark color), use light text
+                const alpha = match[4] ? parseFloat(match[4]) : 1; // Fix: Correct parsing of alpha
                 if (lightness < 55 && alpha > 0.5) {
-                    fillColor = "hsl(var(--primary-foreground))"; // Light text
+                    labelColor = "hsl(var(--primary-foreground))"; // Light text for dark backgrounds
                 }
             }
-         } catch (e) {
-             console.error("Error determining label color based on background", e);
-         }
-          // Ensure visibility for selected/focused items
-         if (selectedItemId === entry.itemId || (isSelectionMode && isItemSelectedForImprovement(entry.itemId))) {
-             fillColor = "hsl(var(--primary-foreground))"; // Use light text on selection highlights
+         } catch (e) { console.error("Label color determination error", e); }
+
+          // Override for selected items in selection mode
+         if (isSelectionMode && isItemSelectedForImprovement(payload.itemId)) {
+             labelColor = "hsl(var(--primary-foreground))"; // Ensure contrast against selection color
+             // Make selection color slightly brighter for the text background contrast maybe? Or just keep it simple.
          }
 
 
-         // Simple split for multi-line labels - keep it concise
-         const nameParts = entry.displayLabel.split(' ');
-         let line1 = entry.displayLabel;
+        // Label positioning logic
+        const midAngleRad = (startAngle + endAngle) / 2 * RADIAN;
+        const radius = innerRadius + (outerRadius - innerRadius) * 0.55; // Position slightly outwards from center
+        const x = cx + radius * Math.cos(-midAngleRad);
+        const y = cy + radius * Math.sin(-midAngleRad);
+
+        // Simple split for multi-line labels
+         const nameParts = payload.displayLabel.split(' ');
+         let line1 = payload.displayLabel;
          let line2 = '';
-         if (entry.displayLabel.length > 15 && nameParts.length > 1) { // Adjust length threshold if needed
-            const breakPoint = Math.ceil(nameParts.length / 2);
-            line1 = nameParts.slice(0, breakPoint).join(' ');
-            line2 = nameParts.slice(breakPoint).join(' ');
+         // Attempt to break long labels intelligently
+         if (payload.displayLabel.length > 13 && nameParts.length > 1) {
+             // Find a good breaking point (e.g., middle word or space)
+             const midIndex = Math.ceil(nameParts.length / 2);
+             line1 = nameParts.slice(0, midIndex).join(' ');
+             line2 = nameParts.slice(midIndex).join(' ');
          }
 
 
-         return (
-            <text
-                x={x}
-                y={y}
-                fill={fillColor}
-                textAnchor="middle"
-                dominantBaseline="central"
-                className="text-[8px] sm:text-[10px] pointer-events-none font-medium" // Smaller, medium weight
-            >
-              {/* Render tspans for potential multi-line */}
-              <tspan x={x} dy={line2 ? "-0.6em" : "0"}>{line1}</tspan>
-              {line2 && <tspan x={x} dy="1.2em">{line2}</tspan>}
-            </text>
-         );
-     }, [isSelectionMode, selectedItemId, isItemSelectedForImprovement]); // Add dependencies
+        return (
+            <g>
+                {/* Define the radial gradient */}
+                 <defs>
+                    <radialGradient id={gradientId} cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
+                      {/* Start with full color at the center */}
+                      <stop offset="0%" stopColor={fill} stopOpacity="1" />
+                       {/* Fade to a less opaque version towards the edge */}
+                       <stop offset={`${scorePercentage * 100}%`} stopColor={fill} stopOpacity="1" />
+                       {/* Transparent beyond the score */}
+                       <stop offset={`${scorePercentage * 100 + 0.1}%`} stopColor={fill} stopOpacity="0.15" />
+                       <stop offset="100%" stopColor={fill} stopOpacity="0.15" />
+                    </radialGradient>
+                 </defs>
+
+                 {/* Base Sector (always full size, slightly muted background) */}
+                  <Sector
+                    cx={cx}
+                    cy={cy}
+                    innerRadius={innerRadius}
+                    outerRadius={outerRadius}
+                    startAngle={startAngle}
+                    endAngle={endAngle}
+                    fill={fill} // Use the base fill color
+                    opacity={0.15} // Make the background muted
+                    stroke={'hsl(var(--background))'} // Background color stroke
+                    strokeWidth={1}
+                  />
+
+                {/* Filled Sector using the gradient */}
+                <Sector
+                    cx={cx}
+                    cy={cy}
+                    innerRadius={innerRadius}
+                    outerRadius={outerRadius} // Apply gradient to the full sector size
+                    startAngle={startAngle}
+                    endAngle={endAngle}
+                    fill={`url(#${gradientId})`} // Use the radial gradient
+                    stroke={activeIndex === order || (isSelectionMode && isItemSelectedForImprovement(payload.itemId)) ? (isItemSelectedForImprovement(payload.itemId) ? SELECTION_COLOR : 'hsl(var(--ring))') : 'hsl(var(--background))'} // Highlight border if active/selected
+                    strokeWidth={activeIndex === order || (isSelectionMode && isItemSelectedForImprovement(payload.itemId)) ? 3 : 1} // Thicker border if active/selected
+                />
+
+
+                {/* Text Label */}
+                 <text
+                     x={x}
+                     y={y}
+                     fill={labelColor}
+                     textAnchor="middle"
+                     dominantBaseline="central"
+                     className="text-[8px] sm:text-[10px] pointer-events-none font-medium" // Smaller, medium weight
+                 >
+                   {/* Render tspans for potential multi-line */}
+                   <tspan x={x} dy={line2 ? "-0.6em" : "0"}>{line1}</tspan>
+                   {line2 && <tspan x={x} dy="1.2em">{line2}</tspan>}
+                 </text>
+            </g>
+        );
+    };
 
 
     if (!isClient) {
@@ -372,61 +417,45 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
         {/* Chart Area */}
         <div className="relative w-full max-w-3xl mx-auto aspect-square"> {/* Increased max-width and kept aspect ratio */}
              <ResponsiveContainer width="100%" height="100%">
-                 {/* Single Pie for Interaction and Labels */}
-                 <PieChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}> {/* Reduced margin */}
+                 <PieChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
                    <Pie
                      data={pieData}
                      cx="50%"
                      cy="50%"
-                     labelLine={false}
-                     outerRadius="95%" // Use almost full radius
-                     innerRadius="25%" // Smaller inner radius
-                     dataKey="value"
+                     labelLine={false} // Line labels disabled as text is inside sector
+                     outerRadius="95%" // Adjust as needed
+                     innerRadius="25%" // Adjust as needed
+                     dataKey="value" // `value: 1` makes all slices equal size
                      onClick={handlePieClick}
                      animationDuration={500}
                      animationEasing="ease-out"
                      className="cursor-pointer focus:outline-none"
-                     label={renderCustomizedNameLabel} // Render inner name labels
-                     startAngle={90}
-                     endAngle={-270}
-                     stroke="hsl(var(--background))"
+                     startAngle={90} // Start at the top
+                     endAngle={-270} // Go full circle counter-clockwise mathematically (visually clockwise)
+                     stroke="hsl(var(--background))" // Separator color
                      strokeWidth={1}
+                     activeIndex={activeIndex ?? undefined} // Control which sector uses renderActiveShape
+                     activeShape={renderActiveShape} // Use custom shape for radial fill and labels
+                     isAnimationActive={true} // Enable animation for active shape transition
                    >
-                     {pieData.map((entry) => {
-                       const isCurrentlySelected = selectedItemId === entry.itemId;
-                       const isConfirmedSelection = isSelectionMode && isItemSelectedForImprovement(entry.itemId);
-
-                       let strokeColor = 'hsl(var(--background))'; // Default border
-                       let strokeWidth = 1;
-
-                       if (isConfirmedSelection) {
-                           strokeColor = 'hsl(var(--accent))'; // Accent border for confirmed selection
-                           strokeWidth = 3; // Thicker border for confirmed
-                       } else if (isCurrentlySelected) {
-                           strokeColor = 'hsl(var(--ring))'; // Ring color for scoring or focused selection
-                           strokeWidth = 3; // Thicker border for focus/scoring
-                       }
-
-                       return (
-                         <Cell
+                    {/* Cells are only needed if NOT using activeShape for everything */}
+                     {pieData.map((entry, index) => (
+                          <Cell
                            key={`cell-${entry.itemId}`}
-                           fill={entry.fillColor} // Calculated fill based on state
-                           stroke={strokeColor}
-                           strokeWidth={strokeWidth}
-                           className="focus:outline-none transition-all duration-300 hover:opacity-80" // Added hover effect
-                           tabIndex={0} // Make focusable
-                           payload={entry} // Pass data to handlers/tooltips
-                           aria-label={`${entry.name}: ${scoreType === 'current' ? (entry.currentScore ?? 'Não avaliado') : scoreType === 'desired' ? (entry.desiredScore ?? 'Não definido') : (isItemSelectedForImprovement(entry.itemId) ? 'Selecionado para melhoria' : 'Não selecionado')}`}
+                           fill={entry.fillColor} // Use pre-calculated fill (handles selection color)
+                           stroke="none" // No stroke here, handled by Sector/activeShape
+                           className="focus:outline-none transition-opacity duration-300 hover:opacity-90"
+                           tabIndex={-1} // Pie handles focus
+                           payload={entry} // Ensure payload is passed for activeShape/tooltip
+                           aria-label={`${entry.name}: ${entry.scoreValue ?? (isSelectionMode ? (isItemSelectedForImprovement(entry.itemId) ? 'Selecionado' : 'Não selecionado') : 'Não avaliado')}`}
                          />
-                       );
-                     })}
+                     ))}
                    </Pie>
-                   {/* Tooltip remains the same */}
                    <Tooltip content={<CustomTooltip />} cursor={{ fill: 'hsla(var(--muted), 0.3)' }}/>
                  </PieChart>
              </ResponsiveContainer>
 
-              {/* Center Icon/Text - slightly smaller and adjusted position */}
+              {/* Center Icon/Text */}
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center -mt-2">
                   {scoreType === 'current' && <Target className="w-8 h-8 sm:w-10 sm:h-10 text-primary mb-1"/>}
                   {scoreType === 'desired' && <CheckCircle className="w-8 h-8 sm:w-10 sm:h-10 text-primary mb-1"/>}
@@ -439,7 +468,52 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
 
          {/* Controls & Category Scores Area Below Chart */}
          <div className="w-full max-w-3xl mx-auto flex flex-col items-center gap-6"> {/* Max width matches chart */}
-            {/* Controls Area */}
+
+              {/* --- Selection Mode: Display Selected Items --- */}
+             {isSelectionMode && (
+                <Card className="w-full shadow-sm bg-muted/50">
+                    <CardHeader className="pb-2 pt-4">
+                        <CardTitle className="text-center text-base text-primary">
+                            Itens Selecionados para Melhoria ({improvementItems.length}/3)
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pb-4">
+                        {improvementItems.length > 0 ? (
+                            <div className="flex flex-wrap justify-center gap-2 mt-2">
+                                {improvementItems.map(item => {
+                                    const details = getItemDetails(item.itemId);
+                                    // Find the corresponding PieDataItem to get the correct index for handlePieClick
+                                    const pieItemIndex = pieData.findIndex(p => p.itemId === item.itemId);
+                                    return (
+                                        <Badge
+                                            key={item.itemId}
+                                            variant="destructive" // Use destructive variant which maps to SELECTION_COLOR
+                                            className="text-sm font-normal cursor-pointer flex items-center gap-1"
+                                            onClick={() => pieItemIndex !== -1 && handlePieClick({ payload: pieData[pieItemIndex] }, pieItemIndex)} // Allow removing by clicking badge
+                                            title={`Clique para remover "${details?.name}"`}
+                                        >
+                                            {details?.name}
+                                            <XCircle className="h-3 w-3" />
+                                        </Badge>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <p className="text-center text-muted-foreground text-sm mt-2">
+                                Clique nos itens do gráfico para selecionar até 3 áreas para focar.
+                            </p>
+                        )}
+                        {improvementItems.length >= 3 && (
+                            <p className="text-center text-destructive text-xs mt-3">
+                                Limite de 3 itens atingido. Clique em um item selecionado (no gráfico ou acima) para remover.
+                            </p>
+                        )}
+                    </CardContent>
+                </Card>
+            )}
+
+
+            {/* --- Scoring Mode Controls --- */}
             <div className="w-full">
                 {/* Scoring Slider Card */}
                 {selectedItemId && !isSelectionMode && (
@@ -475,28 +549,11 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
                             </div>
                         </CardContent>
                         <CardFooter className="flex justify-center gap-4 pb-4">
-                            <Button variant="outline" size="sm" onClick={() => setSelectedItemId(null)}>Cancelar</Button>
+                            <Button variant="outline" size="sm" onClick={() => { setSelectedItemId(null); setActiveIndex(null); }}>Cancelar</Button> {/* Deactivate on cancel */}
                             <Button size="sm" onClick={confirmScore}>Confirmar Nota</Button>
                         </CardFooter>
                     </Card>
                 )}
-
-                {/* Selection Mode Prompt */}
-                 {isSelectionMode && (
-                    <div className="w-full">
-                        <Card className="w-full shadow-sm bg-muted/50 mb-6">
-                            <CardContent className="pt-6 pb-6 text-center text-muted-foreground">
-                                {`Itens selecionados: ${improvementItems.length}/3. `}
-                                {improvementItems.length < 3 && !selectedItemId && 'Clique em um item para focar.'}
-                                {improvementItems.length < 3 && selectedItemId && !isItemSelectedForImprovement(selectedItemId) && `Focado em "${selectedItemDetails?.name}". Clique novamente para selecionar.`}
-                                {improvementItems.length < 3 && selectedItemId && isItemSelectedForImprovement(selectedItemId) && `"${selectedItemDetails?.name}" selecionado. Clique novamente para remover.`}
-                                {improvementItems.length >= 3 && !isItemSelectedForImprovement(selectedItemId ?? '') && 'Limite de 3 itens atingido.'}
-                                 {improvementItems.length >= 3 && isItemSelectedForImprovement(selectedItemId ?? '') && `"${selectedItemDetails?.name}" selecionado. Clique novamente para remover.`}
-                            </CardContent>
-                        </Card>
-                         {/* Action Plan is now handled in a separate stage ('defineActions') */}
-                    </div>
-                 )}
 
 
                 {/* Prompt for scoring modes when no item is selected */}
@@ -538,5 +595,3 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
      </div>
    );
 };
-
-    
