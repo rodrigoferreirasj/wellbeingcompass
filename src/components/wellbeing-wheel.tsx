@@ -46,9 +46,12 @@ interface PieDataItem extends ItemScore {
 
 const RADIAN = Math.PI / 180;
 const SELECTION_COLOR = 'hsl(var(--destructive))'; // A distinct color for selected items
-const MUTED_BACKGROUND_FILL = 'hsl(var(--muted) / 0.1)'; // Very subtle muted background for initial state and unfilled part
-const MUTED_TEXT_COLOR = 'hsl(var(--muted-foreground))'; // For labels on muted background if needed
+const MUTED_BACKGROUND_FILL = 'hsl(var(--muted) / 0.1)'; // Very subtle muted background for unscored/background part
+const MUTED_STROKE_COLOR = 'hsl(var(--border))'; // Subtle border for unscored slices
+const ACTIVE_STROKE_COLOR = 'hsl(var(--ring))'; // Ring color for active slice
 const FOREGROUND_TEXT_COLOR = 'hsl(var(--foreground))'; // Default text color for labels
+const MUTED_TEXT_COLOR = 'hsl(var(--muted-foreground))'; // For labels on muted background if needed
+
 
 export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => {
   const {
@@ -58,6 +61,7 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
     removeImprovementItem,
     goToStage,
     isItemSelectedForImprovement,
+    getActionsForItem, // Needed for selection mode logic
   } = useAssessment();
   const { itemScores, stage, improvementItems } = assessmentData;
   const { toast } = useToast();
@@ -118,8 +122,7 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
         if (activeIndex === index) {
              if (isItemSelectedForImprovement(itemId)) {
                 removeImprovementItem(itemId);
-                // Keep it visually active until another item is clicked? Or deselect?
-                // Let's deselect completely for now
+                // Deselect visually
                 setActiveIndex(null);
                 setSelectedItemId(null);
             } else {
@@ -130,6 +133,8 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
                     setSelectedItemId(itemId); // Ensure selectedItemId is also set
                 } else {
                     toast({ title: "Limite Atingido", description: "Você já selecionou 3 itens para melhorar.", variant: "destructive" });
+                     setActiveIndex(null); // Don't keep focus if limit is hit
+                     setSelectedItemId(null);
                 }
             }
         } else {
@@ -174,7 +179,10 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
 
       // Determine the score value relevant for the current context
       // Use the score of the current stage ('current' or 'desired'). For 'select', visualize 'current' score.
-      const scoreKey = scoreType === 'current' ? 'currentScore' : scoreType === 'desired' ? 'desiredScore' : 'currentScore';
+      let scoreKey: 'currentScore' | 'desiredScore' = 'currentScore'; // Default for 'select'
+      if (scoreType === 'current') scoreKey = 'currentScore';
+      if (scoreType === 'desired') scoreKey = 'desiredScore';
+
       const scoreValueForFill = itemScoreData[scoreKey];
 
       let difference: number | null = null;
@@ -208,7 +216,8 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
 
    const isNextDisabled = useMemo(() => {
     if (isSelectionMode) {
-        return improvementItems.length === 0; // Must select at least one item
+        // Must select at least one item (triggers action plan rendering)
+        return improvementItems.length === 0;
     } else {
         // Must score all items in current or desired stage
         const scoreKeyToCompare = scoreType === 'current' ? 'currentScore' : 'desiredScore';
@@ -282,7 +291,7 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
         // Destructure with defaults and type assertion
         const {
             cx = 0, cy = 0, innerRadius = 0, outerRadius = 0, startAngle = 0, endAngle = 0,
-            fill = MUTED_BACKGROUND_FILL, // Default muted fill from Pie Cell
+            // fill is the base category color passed from Cell
             payload, // This should contain our PieDataItem
             scoreValue, // The specific score (current or desired based on stage)
             order,
@@ -291,42 +300,72 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
 
          // Ensure payload has the expected structure
          if (!payload || typeof payload !== 'object' || !payload.itemId) {
-             // Render a simple placeholder sector if payload is invalid
              return <Sector {...props} fill={MUTED_BACKGROUND_FILL} stroke="none" />;
          }
 
          // Now we know payload is valid PieDataItem
          const { itemId, displayLabel, categoryColor, isImprovementItem } = payload;
 
-        // Determine the fill color for the scored portion: selection color if improvement item, otherwise category color
-        const scoredFillColor = isImprovementItem ? SELECTION_COLOR : categoryColor; // Use categoryColor from payload
+         // Determine the fill color for the scored portion
+         const scoredFillColor = isImprovementItem ? SELECTION_COLOR : categoryColor;
 
-        // Calculate percentage fill
-        const scorePercentage = (scoreValue ?? 0) / 10; // Score out of 10, default 0 if null
-        const fillEndAngle = startAngle + (endAngle - startAngle) * scorePercentage;
+         // Calculate percentage fill (score 1-10)
+         const scorePercentage = (scoreValue ?? 0) / 10; // Default 0 if null (no fill)
+         const fillEndAngle = startAngle + (endAngle - startAngle) * scorePercentage;
 
-        // Label positioning logic - place it roughly in the middle of the radial slice
-        const midAngleRad = (startAngle + endAngle) / 2 * RADIAN;
-        const radius = innerRadius + (outerRadius - innerRadius) * 0.55; // Adjust multiplier for desired position
-        const x = cx + radius * Math.cos(-midAngleRad);
-        const y = cy + radius * Math.sin(-midAngleRad);
+         // Label positioning logic
+         const midAngleRad = (startAngle + endAngle) / 2 * RADIAN;
+         const radius = innerRadius + (outerRadius - innerRadius) * 0.55;
+         const x = cx + radius * Math.cos(-midAngleRad);
+         const y = cy + radius * Math.sin(-midAngleRad);
 
-        // Simple split for multi-line labels
-         const nameParts = displayLabel.split(' ');
-         let line1 = displayLabel;
-         let line2 = '';
-         // Attempt to break long labels intelligently
-         if (displayLabel.length > 13 && nameParts.length > 1) {
-             // Find a good breaking point (e.g., middle word or space)
-             const midIndex = Math.ceil(nameParts.length / 2);
-             line1 = nameParts.slice(0, midIndex).join(' ');
-             line2 = nameParts.slice(midIndex).join(' ');
+        // Determine label color based on background fill for contrast
+         let labelColor = FOREGROUND_TEXT_COLOR; // Default to foreground
+         // If the slice is filled significantly and the fill color is dark, use light text.
+         // Note: This is a basic check; real-world contrast calculation is complex.
+         if (scorePercentage > 0.3) { // Only adjust if there's substantial fill
+             try {
+                 // Attempt to parse HSL color (robustness could be improved)
+                 const match = scoredFillColor.match(/hsl\((\d+)\s*,\s*(\d+)%\s*,\s*([\d.]+)%\)/);
+                 if (match) {
+                     const lightness = parseFloat(match[3]);
+                     // If lightness is low (dark color), use primary-foreground (typically light)
+                     if (lightness < 45) {
+                         labelColor = "hsl(var(--primary-foreground))";
+                     }
+                 }
+             } catch (e) { /* Ignore parsing errors, use default */ }
+         } else if (scorePercentage === 0 && !isActive && !isImprovementItem) {
+            // If no score and not active/selected, use muted text on the muted background
+             labelColor = MUTED_TEXT_COLOR;
          }
 
 
+         // Simple split for multi-line labels
+          const nameParts = displayLabel.split(' ');
+          let line1 = displayLabel;
+          let line2 = '';
+          if (displayLabel.length > 13 && nameParts.length > 1) {
+              const midIndex = Math.ceil(nameParts.length / 2);
+              line1 = nameParts.slice(0, midIndex).join(' ');
+              line2 = nameParts.slice(midIndex).join(' ');
+          }
+
+        // Determine stroke color and width based on state
+        let strokeColor = MUTED_STROKE_COLOR;
+        let strokeWidth = 1;
+        if (isImprovementItem) {
+            strokeColor = SELECTION_COLOR;
+            strokeWidth = 3;
+        } else if (isActive) {
+            strokeColor = ACTIVE_STROKE_COLOR;
+            strokeWidth = 3;
+        }
+
         return (
             <g>
-                 {/* Background Sector (Full slice, always muted) */}
+                 {/* Background Sector (Full slice shape, always present) */}
+                 {/* The fill here acts as the background *behind* the potential scored fill */}
                   <Sector
                     cx={cx}
                     cy={cy}
@@ -335,12 +374,11 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
                     startAngle={startAngle}
                     endAngle={endAngle}
                     fill={MUTED_BACKGROUND_FILL} // Always subtle background
-                    // Stroke indicates active/selected state
-                    stroke={isActive || isImprovementItem ? (isImprovementItem ? SELECTION_COLOR : 'hsl(var(--ring))') : 'hsl(var(--background))'}
-                    strokeWidth={isActive || isImprovementItem ? 3 : 1}
+                    stroke={strokeColor} // Use calculated stroke
+                    strokeWidth={strokeWidth} // Use calculated width
                   />
 
-                {/* Filled Sector based on score percentage */}
+                {/* Filled Sector based on score percentage (only if score exists) */}
                  {scorePercentage > 0 && (
                      <Sector
                          cx={cx}
@@ -349,8 +387,8 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
                          outerRadius={outerRadius}
                          startAngle={startAngle}
                          endAngle={fillEndAngle} // End angle determined by score
-                         fill={scoredFillColor} // Use category color or selection color for the *filled* part
-                         stroke="none" // No stroke needed here, background sector handles it
+                         fill={scoredFillColor} // Actual score color
+                         stroke="none" // No stroke needed for the fill itself
                      />
                  )}
 
@@ -358,7 +396,7 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
                  <text
                      x={x}
                      y={y}
-                     fill={FOREGROUND_TEXT_COLOR} // Use default foreground color for labels
+                     fill={labelColor} // Use calculated label color for contrast
                      textAnchor="middle"
                      dominantBaseline="central"
                      className="text-[8px] sm:text-[10px] pointer-events-none font-medium select-none" // Prevent text selection
@@ -397,22 +435,24 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
                      className="cursor-pointer focus:outline-none"
                      startAngle={90} // Start at the top
                      endAngle={-270} // Go full circle
-                     stroke="hsl(var(--background))" // Separator color matching background
-                     strokeWidth={1}
+                     stroke="none" // Base stroke removed, handled by activeShape
+                     //strokeWidth={1} // Base stroke width removed
                      activeIndex={activeIndex ?? undefined} // Control which sector uses renderActiveShape
                      // Ensure activeShape receives the `isActive` prop correctly
                      activeShape={(props: any) => renderActiveShape({ ...props, isActive: props.index === activeIndex })}
                      isAnimationActive={true} // Keep animation for active shape
                      // Remove default label rendering from Pie component itself
                      label={false}
+                     // Set inactive shape to also use our custom renderer to ensure consistent styling
+                     inactiveShape={(props: any) => renderActiveShape({ ...props, isActive: false })}
                    >
-                    {/* Cells define the base color passed to renderActiveShape */}
+                    {/* Cells define the base category color passed to renderActiveShape's 'fill' prop */}
                      {pieData.map((entry, index) => (
                           <Cell
                            key={`cell-${entry.itemId}`}
                            // Pass the category color. renderActiveShape will decide final fill.
-                           fill={entry.categoryColor} // Base color is category color
-                           stroke="none"
+                           fill={entry.categoryColor} // Base color for score fill
+                           //stroke="none" // No stroke on the cell itself
                            className="focus:outline-none transition-opacity duration-300 hover:opacity-90"
                            tabIndex={-1} // Pie handles focus
                            aria-label={`${entry.name}: ${entry.scoreValue ?? (isSelectionMode ? (entry.isImprovementItem ? 'Selecionado' : 'Não selecionado') : 'Não avaliado')}`}
@@ -479,6 +519,12 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
                             </p>
                         )}
                     </CardContent>
+                     {/* Conditionally render ActionPlan within selection mode once items are chosen */}
+                     {/* {improvementItems.length > 0 && (
+                         <CardFooter className="p-0">
+                            <ActionPlan renderAllSelected={false} />
+                         </CardFooter>
+                      )} */}
                 </Card>
             )}
 
@@ -565,4 +611,3 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
      </div>
    );
 };
-
