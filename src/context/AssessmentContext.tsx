@@ -439,7 +439,16 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
         return;
      }
 
-     // Validation passed, try saving data to Firebase
+     // Validation passed, proceed to summary directly (saving disabled for now)
+     console.log("Saving to Firebase is disabled. Proceeding to summary.");
+     toast({
+         title: "Finalizado (Salvamento Desativado)",
+         description: "Os dados não serão salvos no momento.",
+     });
+     goToStage('summary');
+
+     // DISABLED: Saving data to Firebase - Uncomment to re-enable
+     /*
      try {
        const saveAssessmentDataFunction = httpsCallable(functions, 'saveAssessmentData');
        // Prepare data to send (remove stage, potentially serialize dates if needed)
@@ -474,6 +483,7 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
        });
        // Do not proceed to summary if save fails
      }
+     */
 
   }, [validateAssessmentCompletion, goToStage, toast, assessmentData]);
 
