@@ -14,7 +14,7 @@ import type {
   ActionItem
 } from '@/types/assessment';
 import { initialItemScores, wellbeingCategories, wellbeingItems, getCategoryForItem, getItemDetails, generateActionId } from '@/types/assessment'; // Added generateActionId
-import { sendUserDataEmail, type UserData } from '@/services/email-service'; // Assuming this path is correct
+// Removed email-service import as it's no longer used server-side
 import { useToast } from "@/hooks/use-toast";
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -50,10 +50,12 @@ interface AssessmentContextProps {
   addActionItemSlot: (itemId: string) => void; // Added function to add new action slot
   goToStage: (stage: AssessmentStage) => void;
   submitAssessment: () => Promise<void>; // This transitions to summary
-  sendResultsToCoach: () => Promise<void>; // New function to send email
+  // Removed sendResultsToCoach as it's handled client-side now
   isItemSelectedForImprovement: (itemId: string) => boolean;
   calculateCategoryScores: () => CategoryScore[]; // Calculates averages
   calculateCategoryPercentages: () => CategoryPercentage[]; // Calculates percentages
+  formatAssessmentResults: () => string; // Function to format results for email/display
+  formatActionPlan: () => string; // Function to format action plan for email/display
   getActionsForItem: (itemId: string) => ActionItem[];
   resetAssessment: () => void; // Added reset function
 }
@@ -449,58 +451,6 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
 
   }, [validateAssessmentCompletion, goToStage, toast]);
 
-
-   // New function specifically for sending the email
-   const sendResultsToCoach = useCallback(async () => {
-    const validation = validateAssessmentCompletion();
-     if (!validation.valid) {
-        try {
-            toast({
-                title: "Não é possível enviar",
-                description: `Complete a avaliação primeiro. ${validation.message}`,
-                variant: "destructive",
-                duration: 7000,
-            });
-         } catch (e) { console.error("Toast failed:", e); }
-         if (validation.stage) {
-            goToStage(validation.stage);
-        }
-        return;
-     }
-
-      // Prepare data for the email service
-      const userDataToSend: UserData = {
-        ...(assessmentData.userInfo as UserInfo), // UserInfo is guaranteed by validation
-        assessmentResults: formatAssessmentResults(),
-        actionPlan: formatActionPlan(),
-      };
-
-      try {
-        // Call the actual email sending service
-        await sendUserDataEmail(userDataToSend);
-
-        try {
-            toast({
-              title: "Relatório Enviado!",
-              description: "Seu relatório de avaliação foi enviado para o Coach Rodrigo Ferreira.",
-              duration: 6000,
-            });
-        } catch (e) { console.error("Toast failed:", e); }
-
-      } catch (error) {
-        console.error("Erro ao enviar relatório por email:", error);
-         try {
-            toast({
-              title: "Erro ao Enviar",
-              description: "Houve um problema ao enviar seu relatório. Tente novamente mais tarde ou contate o suporte.",
-              variant: "destructive",
-            });
-        } catch (e) { console.error("Toast failed:", e); }
-      }
-
-   }, [assessmentData.userInfo, formatAssessmentResults, formatActionPlan, validateAssessmentCompletion, goToStage, toast]);
-
-
   // Function to reset the assessment state to initial values
   const resetAssessment = useCallback(() => {
     setAssessmentData({
@@ -528,10 +478,12 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
     addActionItemSlot, // Function to add new action slot
     goToStage,
     submitAssessment, // Moves to summary
-    sendResultsToCoach, // Sends email
+    // sendResultsToCoach removed
     isItemSelectedForImprovement,
     calculateCategoryScores, // Calculates averages
     calculateCategoryPercentages, // Calculates percentages
+    formatAssessmentResults,
+    formatActionPlan,
     getActionsForItem,
     resetAssessment, // Function to reset entire assessment
   };

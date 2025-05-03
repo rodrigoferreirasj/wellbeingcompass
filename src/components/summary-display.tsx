@@ -8,7 +8,7 @@ import { wellbeingItems, wellbeingCategories, getItemDetails, getCategoryForItem
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Printer, RotateCcw, TrendingUp, Calendar, Send, Loader2 } from 'lucide-react'; // Added Send and Loader2 icons
+import { Printer, RotateCcw, TrendingUp, Calendar, Send } from 'lucide-react'; // Removed Loader2 icon
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -16,11 +16,11 @@ import { CategoryScoresDisplay } from './category-scores-display';
 
 
 export const SummaryDisplay: React.FC = () => {
-  const { assessmentData, resetAssessment, sendResultsToCoach } = useAssessment(); // Use sendResultsToCoach
+  const { assessmentData, resetAssessment, formatAssessmentResults, formatActionPlan } = useAssessment(); // Removed sendResultsToCoach
   const { userInfo, itemScores, improvementItems } = assessmentData;
   const printRef = useRef<HTMLDivElement>(null);
   const [isClient, setIsClient] = useState(false);
-  const [isSending, setIsSending] = useState(false); // State for loading button
+  // Removed isSending state
 
   useEffect(() => {
     setIsClient(true);
@@ -106,17 +106,46 @@ export const SummaryDisplay: React.FC = () => {
      // window.location.reload();
   };
 
-  const handleSendResults = async () => {
-      setIsSending(true);
-      try {
-          await sendResultsToCoach();
-          // Success toast is handled within the context function
-      } catch (error) {
-          // Error toast is handled within the context function
-          console.error("Send results failed:", error);
-      } finally {
-          setIsSending(false);
+  // Updated function to use mailto:
+  const handleSendResults = () => {
+      if (!assessmentData.userInfo) {
+          // Add a toast or alert if needed, although validation should prevent this stage if no user info
+          console.error("User info missing, cannot create email.");
+          return;
       }
+
+      const recipient = "rodrigo@pontosfortes.com.br";
+      const subject = `Relatório Wellbeing Compass de ${assessmentData.userInfo.fullName}`;
+      const resultsBody = formatAssessmentResults();
+      const planBody = formatActionPlan();
+
+      const emailBody = `
+Olá Rodrigo,
+
+Segue o relatório da Roda do Bem-Estar preenchido por ${assessmentData.userInfo.fullName}.
+
+Informações do Usuário:
+Nome: ${assessmentData.userInfo.fullName}
+Cargo: ${assessmentData.userInfo.jobTitle}
+Empresa: ${assessmentData.userInfo.company}
+Email: ${assessmentData.userInfo.email}
+Telefone: ${assessmentData.userInfo.phone}
+
+-----------------------------
+${resultsBody}
+-----------------------------
+${planBody}
+-----------------------------
+
+Atenciosamente,
+${assessmentData.userInfo.fullName}
+      `;
+
+      // Encode subject and body for the mailto link
+      const mailtoLink = `mailto:${recipient}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(emailBody)}`;
+
+      // Open the user's default email client
+      window.location.href = mailtoLink;
   };
 
 
@@ -243,14 +272,10 @@ export const SummaryDisplay: React.FC = () => {
                 <Printer className="mr-2 h-4 w-4" /> Imprimir / Salvar PDF
                 </Button>
              </div>
-             {/* Send to coach button on the right */}
-             <Button onClick={handleSendResults} disabled={isSending}>
-                {isSending ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                    <Send className="mr-2 h-4 w-4" />
-                )}
-                {isSending ? 'Enviando...' : 'Enviar Relatório para o Coach'}
+             {/* Send to coach button on the right - Now uses mailto */}
+             <Button onClick={handleSendResults}>
+                 <Send className="mr-2 h-4 w-4" />
+                 Enviar Relatório para o Coach
             </Button>
         </CardFooter>
         </Card>
