@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -24,8 +25,8 @@ interface PieDataItem extends ItemScore {
   categoryColor: string;
   value: number; // Fixed value for equal slices
   fillColor: string;
-  label: string; // Display label for inner score/check
-  nameLabel: string; // Display label for outer name
+  displayLabel: string; // Label for inner display (score, check, diff, or name) - Renamed from 'label'
+  nameLabel: string; // Display label for outer name - Keeping for reference, might remove usage
   difference?: number | null;
   order: number;
   // Recharts injected props
@@ -38,10 +39,10 @@ interface PieDataItem extends ItemScore {
   endAngle?: number;
   percent?: number;
   payload?: any;
-  // Custom props for positioning
-  labelX?: number;
-  labelY?: number;
-  labelAnchor?: 'start' | 'middle' | 'end';
+  // Custom props for positioning - No longer needed for outer labels
+  // labelX?: number;
+  // labelY?: number;
+  // labelAnchor?: 'start' | 'middle' | 'end';
 }
 
 
@@ -164,7 +165,8 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
         } else if (selectedItemId === itemId) {
              return 'hsl(var(--ring) / 0.7)'; // Highlight item currently focused for potential selection
         } else {
-            return baseColor; // Default color if not selected or focused
+            // In selection mode, use full opacity if not selected/focused
+             return baseColor;
         }
     }
 
@@ -184,10 +186,12 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
     const opacity = Math.min(1, Math.max(0.15, (score / 8))); // Adjust opacity range/curve if needed
 
     try {
-      const hslMatch = baseColor.match(/hsl\(\s*(\d+)\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%\s*\)/);
-      if (hslMatch) {
+      // Try to parse HSL(A) color to adjust opacity
+      const match = baseColor.match(/hsla?\(\s*(\d+)\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%(?:\s*,\s*([\d.]+))?\s*\)/);
+      if (match) {
+        const [h, s, l] = match.slice(1, 4);
         const clampedOpacity = Math.max(0, Math.min(1, opacity));
-        return `hsla(${hslMatch[1]}, ${hslMatch[2]}%, ${hslMatch[3]}%, ${clampedOpacity})`;
+        return `hsla(${h}, ${s}%, ${l}%, ${clampedOpacity})`;
       }
     } catch (e) {
       console.error("Color conversion error", e);
@@ -199,100 +203,38 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
 
 
   const pieData: PieDataItem[] = useMemo(() => {
-    // The fixed order as defined in wellbeingItems
-    const orderedItems = wellbeingItems;
+    const orderedItems = wellbeingItems; // Use the fixed order
 
-    const data = orderedItems.map((item, index) => {
-        const category = getCategoryForItem(item.id);
-        const itemScoreData = itemScores.find(s => s.itemId === item.id) || { itemId: item.id, currentScore: null, desiredScore: null };
-        const categoryColor = category?.color ?? 'hsl(var(--secondary))';
+    return orderedItems.map((item, index) => {
+      const category = getCategoryForItem(item.id);
+      const itemScoreData = itemScores.find(s => s.itemId === item.id) || { itemId: item.id, currentScore: null, desiredScore: null };
+      const categoryColor = category?.color ?? 'hsl(var(--secondary))';
+      const scoreKey = scoreType === 'current' ? 'currentScore' : 'desiredScore';
 
-        const scoreKey = scoreType === 'current' ? 'currentScore' : 'desiredScore';
-        const currentDisplayScore = itemScoreData.currentScore;
-        const desiredDisplayScore = itemScoreData.desiredScore;
+      let difference: number | null = null;
+      if (itemScoreData.currentScore !== null && itemScoreData.desiredScore !== null) {
+        difference = itemScoreData.desiredScore - itemScoreData.currentScore;
+      }
 
-        let labelValue: string | number = ''; // For inner score/check label
-        let nameLabelValue = item.name; // For outer name label
-        let difference: number | null = null;
+      // The inner label will now be the item name
+      const displayLabelValue = item.name;
+      const nameLabelValue = item.name; // Keep for potential tooltip/future use
 
-        if (itemScoreData.currentScore !== null && itemScoreData.desiredScore !== null) {
-            difference = itemScoreData.desiredScore - itemScoreData.currentScore;
-        }
-
-        // Determine the inner label (score, check, difference)
-        if (isSelectionMode) {
-          if (isItemSelectedForImprovement(item.id)) {
-            labelValue = '✓'; // Checkmark for selected items
-          } else if (difference !== null && difference !== 0) { // Show difference if non-zero
-             labelValue = difference > 0 ? `+${difference}` : difference.toString();
-          } else if (currentDisplayScore !== null) { // Fallback to current score if no difference/selection
-             labelValue = currentDisplayScore;
-          }
-          // Keep nameLabelValue as item.name
-        } else {
-           // In scoring modes, show the relevant score inside
-           const score = itemScoreData[scoreKey];
-           labelValue = score !== null ? score : '';
-           // Keep nameLabelValue as item.name
-        }
-
-        // Initial data structure
-        const pieEntry: PieDataItem = {
-          ...itemScoreData,
-          itemId: item.id,
-          name: item.name,
-          categoryName: category?.name ?? 'Unknown',
-          categoryColor: categoryColor,
-          value: 1, // Equal size slice
-          fillColor: calculateFillColor(itemScoreData, categoryColor),
-          label: labelValue.toString(),
-          nameLabel: nameLabelValue, // Use the item's name for the outer label
-          difference: difference,
-          order: index, // Store the original index for potential sorting/reference
-           // Default placeholder values, will be calculated next
-           midAngle: 0,
-           labelX: 0,
-           labelY: 0,
-           labelAnchor: 'middle',
-        };
-        return pieEntry;
-      });
-
-       // Calculate label positions based on the fixed order
-       const numItems = data.length;
-       const angleStep = 360 / numItems;
-       // Ensure consistent start angle for label positioning
-       const startAngleOffset = 90 - (angleStep / 2); // Adjusted start: center of first slice at 12 o'clock
-
-       return data.map((entry, index) => {
-            const baseOuterRadius = 100; // Percentage for pie slice edge
-            const labelRadiusMultiplier = isSelectionMode ? 1.15 : 1.25; // Place labels slightly closer in selection mode to avoid overlap with potential ActionPlan
-            const outerRadiusValue = baseOuterRadius;
-            const labelRadius = outerRadiusValue * labelRadiusMultiplier; // Calculate radius for name label
-
-            // Using dummy cx, cy as relative positioning will happen in the render function
-            const cx = 50; // Assuming center is 50%
-            const cy = 50;
-
-            // Calculate midAngle based on fixed index
-            const midAngle = startAngleOffset - (index * angleStep); // Center angle for the slice
-
-            const x = cx + labelRadius * Math.cos(-midAngle * RADIAN);
-            const y = cy + labelRadius * Math.sin(-midAngle * RADIAN);
-            const textAnchor = x > cx + 1 ? 'start' : x < cx - 1 ? 'end' : 'middle'; // Add tolerance for middle anchor
-
-
-            return {
-                ...entry,
-                midAngle: midAngle,
-                labelX: x, // Store calculated X position (as percentage)
-                labelY: y, // Store calculated Y position (as percentage)
-                labelAnchor: textAnchor, // Store text anchor
-            };
-       });
-
-
-  }, [itemScores, scoreType, isSelectionMode, isItemSelectedForImprovement, calculateFillColor]); // Dependencies for pieData calculation
+      return {
+        ...itemScoreData,
+        itemId: item.id,
+        name: item.name,
+        categoryName: category?.name ?? 'Unknown',
+        categoryColor: categoryColor,
+        value: 1, // Equal size slice
+        fillColor: calculateFillColor(itemScoreData, categoryColor),
+        displayLabel: displayLabelValue, // Use item name for inner display
+        nameLabel: nameLabelValue,
+        difference: difference,
+        order: index,
+      };
+    });
+  }, [itemScores, scoreType, isSelectionMode, isItemSelectedForImprovement, calculateFillColor]);
 
 
    const isNextDisabled = useMemo(() => {
@@ -361,101 +303,63 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
     return null;
   };
 
-    // Renders the outer name labels
-    const renderCustomizedNameLabel = useCallback(({ payload, cx, cy }: any) => {
-        const entry = payload as PieDataItem;
-        // Use the pre-calculated positions from pieData
-        if (!entry || entry.labelX === undefined || entry.labelY === undefined || !entry.nameLabel) return null;
-
-        const name = entry.nameLabel;
-        // Simple split for multi-line labels
-        const nameParts = name.split(' ');
-        const line1 = nameParts.length > 2 ? nameParts.slice(0, -1).join(' ') : nameParts[0]; // Take all but last word for line 1 if > 2 words
-        const line2 = nameParts.length > 1 ? nameParts[nameParts.length-1] : ''; // Take last word for line 2 if > 1 word
-
-        // Adjust y based on whether there are two lines
-        const yPosition = entry.labelY; // Use precalculated Y
-
-        return (
-             <text
-                // Use percentage-based positioning relative to the container
-                x={`${entry.labelX}%`}
-                y={`${yPosition}%`} // Use precalculated Y
-                fill="hsl(var(--foreground))"
-                textAnchor={entry.labelAnchor}
-                dominantBaseline="central"
-                className="text-[9px] sm:text-[11px] pointer-events-none" // Slightly smaller font
-                style={{ fontWeight: 500, fill: 'hsl(var(--foreground))' }} // Force label color
-             >
-                {/* Render tspans for potential multi-line */}
-                <tspan x={`${entry.labelX}%`} dy={line2 ? "-0.6em" : "0"}>{line1}</tspan>
-                {line2 && <tspan x={`${entry.labelX}%`} dy="1.2em">{line2}</tspan>}
-             </text>
-        );
-    }, [isSelectionMode]); // Re-added isSelectionMode dependency to recalculate labelRadiusMultiplier if mode changes
-
-
-     // Renders the inner score/check labels
-     const renderCustomizedScoreLabel = useCallback(({ cx, cy, midAngle, innerRadius, outerRadius, payload }: any) => {
+     // Renders the inner item name labels
+     const renderCustomizedNameLabel = useCallback(({ cx, cy, midAngle, innerRadius, outerRadius, payload }: any) => {
          const entry = payload as PieDataItem;
-         if (!entry || entry.label === '' || !midAngle) return null; // Check if label exists
+         if (!entry || !entry.displayLabel || !midAngle) return null;
 
-         // Calculate position based on angles and radii provided by Recharts
-         const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+         const radius = innerRadius + (outerRadius - innerRadius) * 0.55; // Position slightly outwards from center
          const x = cx + radius * Math.cos(-midAngle * RADIAN);
          const y = cy + radius * Math.sin(-midAngle * RADIAN);
 
-         const isCheckmark = isSelectionMode && entry.label === '✓';
-         const difference = entry.difference;
-         // Check if the label *is* the difference string
-         const isDifferenceLabel = isSelectionMode && difference !== null && entry.label === (difference > 0 ? `+${difference}` : difference.toString());
-
-         let fillColor = "hsl(var(--primary-foreground))"; // Default: light text
-         let fontWeight: string | number = 'bold';
-         let fontSize = isCheckmark ? 20 : 16; // Larger checkmark
-
-         // Style for difference labels
-         if (isDifferenceLabel && difference !== null) {
-             if (difference > 0) fillColor = 'hsl(142, 71%, 20%)'; // Dark green text
-             else if (difference < 0) fillColor = 'hsl(0, 84%, 25%)'; // Dark red text
-             else fillColor = 'hsl(var(--muted-foreground))'; // Muted for zero difference
-             fontSize = 14;
-             fontWeight = 600;
-         } else if (!isCheckmark && !isDifferenceLabel) {
-            // Style for regular score labels
-            const scoreValue = parseInt(entry.label);
-             if (!isNaN(scoreValue)) {
-                 // Basic contrast logic: Light text for low scores/opaque, Dark text for high scores/transparent
-                 const scoreOpacity = Math.min(1, Math.max(0.15, (scoreValue / 8)));
-                 if (scoreValue < 5 || scoreOpacity > 0.6) { // Darker background? Use light text.
-                     fillColor = "hsl(var(--primary-foreground))";
-                 } else { // Lighter background? Use dark text.
-                     fillColor = "hsl(var(--foreground))";
-                 }
-             }
+         // Basic contrast logic: Determine text color based on fill color's perceived lightness
+         let fillColor = "hsl(var(--foreground))"; // Default to dark text
+         try {
+            // Extract HSL values from the fillColor
+            const match = entry.fillColor.match(/hsla?\(\s*(\d+)\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%(?:\s*,\s*([\d.]+))?\s*\)/);
+            if (match) {
+                const lightness = parseFloat(match[3]);
+                const alpha = match[4] ? parseFloat(match[4]) : 1;
+                // If background is dark (low lightness or high opacity on dark color), use light text
+                if (lightness < 55 && alpha > 0.5) {
+                    fillColor = "hsl(var(--primary-foreground))"; // Light text
+                }
+            }
+         } catch (e) {
+             console.error("Error determining label color based on background", e);
+         }
+          // Ensure visibility for selected/focused items
+         if (selectedItemId === entry.itemId || (isSelectionMode && isItemSelectedForImprovement(entry.itemId))) {
+             fillColor = "hsl(var(--primary-foreground))"; // Use light text on selection highlights
          }
 
-         // Style for checkmark
-         if (isCheckmark) {
-              fillColor = "hsl(var(--primary-foreground))"; // Ensure checkmark is visible on accent background
+
+         // Simple split for multi-line labels - keep it concise
+         const nameParts = entry.displayLabel.split(' ');
+         let line1 = entry.displayLabel;
+         let line2 = '';
+         if (entry.displayLabel.length > 15 && nameParts.length > 1) { // Adjust length threshold if needed
+            const breakPoint = Math.ceil(nameParts.length / 2);
+            line1 = nameParts.slice(0, breakPoint).join(' ');
+            line2 = nameParts.slice(breakPoint).join(' ');
          }
 
 
          return (
-         <text
-             x={x}
-             y={y}
-             fill={fillColor}
-             textAnchor="middle"
-             dominantBaseline="central"
-             fontWeight={fontWeight}
-             fontSize={fontSize}
-             className="pointer-events-none" // Don't interfere with clicks on the slice
-         >
-             {entry.label}
-         </text>
+            <text
+                x={x}
+                y={y}
+                fill={fillColor}
+                textAnchor="middle"
+                dominantBaseline="central"
+                className="text-[8px] sm:text-[10px] pointer-events-none font-medium" // Smaller, medium weight
+            >
+              {/* Render tspans for potential multi-line */}
+              <tspan x={x} dy={line2 ? "-0.6em" : "0"}>{line1}</tspan>
+              {line2 && <tspan x={x} dy="1.2em">{line2}</tspan>}
+            </text>
          );
-     }, [isSelectionMode]); // Dependency on isSelectionMode
+     }, [isSelectionMode, selectedItemId, isItemSelectedForImprovement]); // Add dependencies
 
 
     if (!isClient) {
@@ -468,22 +372,21 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
         {/* Chart Area */}
         <div className="relative w-full max-w-3xl mx-auto aspect-square"> {/* Increased max-width and kept aspect ratio */}
              <ResponsiveContainer width="100%" height="100%">
-                 {/* Added explicit margin for labels */}
-                 <PieChart margin={{ top: 50, right: 50, bottom: 50, left: 50 }}>
-                   {/* Outer Pie for Interaction and Names */}
+                 {/* Single Pie for Interaction and Labels */}
+                 <PieChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}> {/* Reduced margin */}
                    <Pie
                      data={pieData}
                      cx="50%"
                      cy="50%"
                      labelLine={false}
-                     outerRadius="80%" // Reduced outer radius slightly to give labels more space
-                     innerRadius="30%"
+                     outerRadius="95%" // Use almost full radius
+                     innerRadius="25%" // Smaller inner radius
                      dataKey="value"
                      onClick={handlePieClick}
                      animationDuration={500}
                      animationEasing="ease-out"
                      className="cursor-pointer focus:outline-none"
-                     label={renderCustomizedNameLabel} // Render outer name labels
+                     label={renderCustomizedNameLabel} // Render inner name labels
                      startAngle={90}
                      endAngle={-270}
                      stroke="hsl(var(--background))"
@@ -518,38 +421,17 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
                        );
                      })}
                    </Pie>
-                    {/* Inner Pie for Scores/Checks (non-interactive) */}
-                    <Pie
-                        data={pieData}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        outerRadius="80%" // Match outer radius
-                        innerRadius="30%" // Match inner radius
-                        dataKey="value" // Use dummy value
-                        label={renderCustomizedScoreLabel} // Render inner score/check labels
-                        startAngle={90} // Match start angle
-                        endAngle={-270} // Match end angle
-                        isAnimationActive={false} // No animation needed
-                        className="pointer-events-none" // Make it non-interactive
-                        stroke="none" // No border for the inner labels pie
-                    >
-                        {/* Map cells just to provide structure, fill is transparent */}
-                        {pieData.map((entry) => (
-                            <Cell key={`label-cell-${entry.itemId}`} fill="transparent" />
-                        ))}
-                    </Pie>
-
+                   {/* Tooltip remains the same */}
                    <Tooltip content={<CustomTooltip />} cursor={{ fill: 'hsla(var(--muted), 0.3)' }}/>
                  </PieChart>
              </ResponsiveContainer>
 
-              {/* Center Icon/Text */}
-              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center -mt-4">
-                  {scoreType === 'current' && <Target className="w-10 h-10 sm:w-12 sm:h-12 text-primary mb-1"/>}
-                  {scoreType === 'desired' && <CheckCircle className="w-10 h-10 sm:w-12 sm:h-12 text-primary mb-1"/>}
-                  {scoreType === 'select' && <Star className="w-10 h-10 sm:w-12 sm:h-12 text-primary mb-1"/>}
-                 <span className="text-base sm:text-lg font-medium text-foreground uppercase tracking-wider mt-1">
+              {/* Center Icon/Text - slightly smaller and adjusted position */}
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center -mt-2">
+                  {scoreType === 'current' && <Target className="w-8 h-8 sm:w-10 sm:h-10 text-primary mb-1"/>}
+                  {scoreType === 'desired' && <CheckCircle className="w-8 h-8 sm:w-10 sm:h-10 text-primary mb-1"/>}
+                  {scoreType === 'select' && <Star className="w-8 h-8 sm:w-10 sm:h-10 text-primary mb-1"/>}
+                 <span className="text-sm sm:text-base font-medium text-foreground uppercase tracking-wider mt-1">
                      {scoreType === 'current' ? 'Atual' : scoreType === 'desired' ? 'Desejado' : 'Melhorar'}
                  </span>
               </div>
@@ -656,3 +538,5 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
      </div>
    );
 };
+
+    
