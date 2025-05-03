@@ -13,7 +13,6 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
 import { CategoryScoresDisplay } from './category-scores-display';
 import { Badge } from '@/components/ui/badge'; // Import Badge
-// Removed ActionPlan import as it's handled in a separate stage
 
 interface WellbeingWheelProps {
   scoreType: 'current' | 'desired' | 'select';
@@ -41,7 +40,7 @@ interface PieDataItem extends ItemScore {
   fill?: string; // Base category color is passed here by Pie's Cell
   payload?: any; // Reference to the original PieDataItem object
   // Props for ActiveShape state management
-  isActive?: boolean; // Indicates if this is the currently rendered active shape/focused item
+  isActive?: boolean; // Indicates if this is the currently rendered active shape/focused item (for scoring interaction)
 }
 
 
@@ -51,7 +50,6 @@ const MUTED_FILL_COLOR = 'hsl(var(--muted))'; // Initial gray color for slices w
 const MUTED_STROKE_COLOR = 'hsl(var(--border))'; // Subtle border for slices
 const ACTIVE_STROKE_COLOR = 'hsl(var(--ring))'; // Ring color for active slice
 const FOREGROUND_TEXT_COLOR = 'hsl(var(--foreground))'; // Default text color for labels
-// const MUTED_TEXT_COLOR = 'hsl(var(--muted-foreground))'; // For labels on muted background if needed (removed as foreground is used)
 
 
 export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => {
@@ -62,7 +60,6 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
     removeImprovementItem,
     goToStage,
     isItemSelectedForImprovement,
-    // getActionsForItem, // No longer needed here
   } = useAssessment();
   const { itemScores, stage, improvementItems } = assessmentData;
   const { toast } = useToast();
@@ -70,7 +67,7 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [sliderValue, setSliderValue] = useState<number>(5);
   const [isClient, setIsClient] = useState(false);
-  const [activeIndex, setActiveIndex] = useState<number | null>(null); // For active shape rendering
+  const [activeIndex, setActiveIndex] = useState<number | null>(null); // For active shape rendering during scoring interaction
 
   useEffect(() => {
     setIsClient(true);
@@ -100,13 +97,10 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
     } else if (!selectedItemId && !isSelectionMode) { // Only reset slider in scoring modes
          setSliderValue(5); // Reset slider if no item selected for scoring
     }
-     // In selection mode, slider value isn't used, so no need to update it based on selection
   }, [selectedItemData, scoreType, isSelectionMode, selectedItemId]);
 
 
  const handlePieClick = useCallback((data: any, index: number) => {
-    // data might be the event or the payload depending on recharts version/context
-    // Safely access payload - prefer payload from the event/data if possible, fallback to payload property
     const clickedPayload = data?.payload?.payload || data?.payload || data;
     const itemId = clickedPayload?.itemId;
 
@@ -117,12 +111,10 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
         return;
     }
 
-    // Handle selection logic differently
     if (isSelectionMode) {
         // Clicking toggles selection
         if (isItemSelectedForImprovement(itemId)) {
             removeImprovementItem(itemId);
-            // No need to manage activeIndex or selectedItemId for scoring in this mode
         } else {
             if (improvementItems.length < 3) {
                 selectImprovementItem(itemId);
@@ -130,16 +122,17 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
                 toast({ title: "Limite Atingido", description: "Você já selecionou 3 itens para melhorar.", variant: "destructive" });
             }
         }
-        // Always clear scoring-related state in selection mode clicks
+        // Clear scoring-related state in selection mode clicks
         setActiveIndex(null);
         setSelectedItemId(null);
     } else {
-         // In scoring modes, clicking always selects the item for scoring
-         // If clicking the already active item, deselect it
+         // Scoring modes: clicking selects/deselects the item for scoring interaction
          if (activeIndex === index) {
+             // If clicking the already active item, deselect it for scoring
              setActiveIndex(null);
              setSelectedItemId(null);
          } else {
+             // Select the new item for scoring
              setActiveIndex(index);
              setSelectedItemId(itemId);
          }
@@ -160,23 +153,20 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
         title: "Pontuação Salva",
         description: `Nota ${sliderValue} salva para ${selectedItemDetails.name}.`,
       });
-      // Keep the chart visually updated, but deselect the item for scoring interface
-      setSelectedItemId(null);
-      setActiveIndex(null); // Deactivate shape rendering for the slider card
+      // Keep the item selected visually and the slider open until user clicks away
+      // setSelectedItemId(null); // Keep selected
+      // setActiveIndex(null); // Keep active for visual feedback
     }
   };
 
   const pieData: PieDataItem[] = useMemo(() => {
-    // Ensure items are consistently ordered based on the predefined wellbeingItems array
     return wellbeingItems.map((item, index) => {
       const category = getCategoryForItem(item.id);
       const itemScoreData = itemScores.find(s => s.itemId === item.id) || { itemId: item.id, currentScore: null, desiredScore: null };
       const categoryColor = category?.color ?? 'hsl(var(--secondary))';
       const isImprovement = isItemSelectedForImprovement(item.id);
 
-      // Determine the score value relevant for the current context
-      // Use the score of the current stage ('current' or 'desired'). For 'select', visualize 'current' score for fill.
-      let scoreKey: 'currentScore' | 'desiredScore' = 'currentScore'; // Default for 'select' visualization
+      let scoreKey: 'currentScore' | 'desiredScore' = 'currentScore';
       if (scoreType === 'current') scoreKey = 'currentScore';
       if (scoreType === 'desired') scoreKey = 'desiredScore';
 
@@ -187,9 +177,7 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
         difference = itemScoreData.desiredScore - itemScoreData.currentScore;
       }
 
-      // Display Label: Name + Difference in selection mode
       let displayLabelValue = item.name;
-       // Only show difference in selection mode
       if (isSelectionMode && difference !== null) {
            displayLabelValue += ` (${difference >= 0 ? '+' : ''}${difference})`;
       }
@@ -197,14 +185,14 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
       return {
         ...itemScoreData,
         itemId: item.id,
-        name: item.name, // Keep original name for tooltips/logic
+        name: item.name,
         categoryName: category?.name ?? 'Unknown',
         categoryColor: categoryColor,
         value: 1, // Equal size slice
-        displayLabel: displayLabelValue, // Label for display inside slice
+        displayLabel: displayLabelValue,
         difference: difference,
-        order: index, // Use index from the definitive wellbeingItems array
-        scoreValue: scoreValueForFill, // Pass the relevant score for rendering radial fill
+        order: index,
+        scoreValue: scoreValueForFill,
         isImprovementItem: isImprovement,
       };
     });
@@ -213,27 +201,24 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
 
    const isNextDisabled = useMemo(() => {
     if (isSelectionMode) {
-        // Must select at least one item to proceed to action definition
         return improvementItems.length === 0;
     } else {
-        // Must score all items in current or desired stage
         const scoreKeyToCompare = scoreType === 'current' ? 'currentScore' : 'desiredScore';
         return itemScores.some(s => s[scoreKeyToCompare] === null);
     }
    }, [isSelectionMode, improvementItems.length, itemScores, scoreType]);
 
   const CustomTooltip = ({ active, payload }: any) => {
-     // Use the payload from the first item, which corresponds to the hovered sector
     const data = payload && payload.length ? (payload[0].payload as PieDataItem) : null;
 
     if (active && data && data.itemId) {
       const itemDetails = getItemDetails(data.itemId);
       const currentScore = data.currentScore;
       const desiredScore = data.desiredScore;
-      const difference = data.difference; // Already calculated in pieData
+      const difference = data.difference;
 
       return (
-        <div className="bg-background border border-border rounded-md shadow-lg p-3 text-sm max-w-xs z-50"> {/* Ensure tooltip is above */}
+        <div className="bg-background border border-border rounded-md shadow-lg p-3 text-sm max-w-xs z-50">
           <p className="font-semibold text-primary">{data.name} <span className="text-xs text-muted-foreground">({data.categoryName})</span></p>
           {itemDetails?.description && <p className="text-muted-foreground text-xs mt-1">{itemDetails.description}</p>}
 
@@ -248,28 +233,23 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
               )}
           </div>
 
-           {/* Selection Mode Tooltip Hints */}
            {isSelectionMode && data.isImprovementItem && (
                <p className="mt-2 text-destructive font-medium flex items-center"><Star className="w-3 h-3 mr-1 fill-destructive" />Selecionado para Melhoria</p>
            )}
-           {/* Hint when hovering over an item that CAN be selected */}
            {isSelectionMode && !data.isImprovementItem && improvementItems.length < 3 && (
                <p className="mt-2 text-muted-foreground text-xs italic">Clique para selecionar este item para melhoria.</p>
            )}
-            {/* Hint when hovering over an item that is already selected */}
            {isSelectionMode && data.isImprovementItem && (
                 <p className="mt-2 text-muted-foreground text-xs italic">Clique para remover este item da seleção.</p>
            )}
-           {/* Hint when limit reached */}
            {isSelectionMode && !data.isImprovementItem && improvementItems.length >= 3 && (
                 <p className="mt-2 text-destructive text-xs italic">Limite de 3 itens selecionados atingido.</p>
            )}
 
-           {/* Scoring Mode Tooltip Hints */}
-            {!isSelectionMode && activeIndex !== data.order && ( // Only show hint if item is not already selected for scoring
+            {!isSelectionMode && activeIndex !== data.order && (
                  <p className="mt-2 text-muted-foreground text-xs italic">Clique para {data.scoreValue === null ? 'definir' : 'editar'} a nota {scoreType === 'current' ? 'atual' : 'desejada'}.</p>
             )}
-             {!isSelectionMode && activeIndex === data.order && ( // Hint to cancel scoring selection
+             {!isSelectionMode && activeIndex === data.order && (
                  <p className="mt-2 text-muted-foreground text-xs italic">Clique novamente para cancelar a avaliação deste item.</p>
             )}
         </div>
@@ -281,50 +261,39 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
 
     // Custom Active Shape for Radial Fill Effect and Labels
     const renderActiveShape = (props: any) => {
-        // Destructure with defaults and type assertion
         const {
             cx = 0, cy = 0, innerRadius = 0, outerRadius = 0, startAngle = 0, endAngle = 0,
-            // fill is the base category color passed from Cell - NOT USED FOR FILL DIRECTLY
-            payload, // This should contain our PieDataItem
-            // Directly access scoreValue from props, which is passed down from pieData
-            scoreValue,
-            order, // Use order from props (matches index)
-            isActive // Passed based on activeIndex comparison (for SCORING mode)
+            payload, // This contains our PieDataItem
+            isActive // Passed based on activeIndex comparison (for SCORING mode interaction)
         } = props as PieDataItem & { isActive?: boolean };
 
-         // Ensure payload has the expected structure
          if (!payload || typeof payload !== 'object' || !payload.itemId) {
-             // Render a basic, muted sector if payload is invalid
              return <Sector {...props} fill={MUTED_FILL_COLOR} stroke={MUTED_STROKE_COLOR} strokeWidth={1} />;
          }
 
-         // Now we know payload is valid PieDataItem
-         const { itemId, displayLabel, categoryColor, isImprovementItem } = payload;
+         const { scoreValue, displayLabel, categoryColor, isImprovementItem } = payload;
 
          // Determine the color for the scored portion
          let scoredFillColor = isImprovementItem ? SELECTION_COLOR : categoryColor;
-         // Base fill is muted gray
+         // Base fill is always muted gray
          const baseFillColor = MUTED_FILL_COLOR;
 
          // Calculate percentage fill (score 1-10)
-         const scorePercentage = scoreValue !== null ? (scoreValue / 10) : 0; // Use 0 if score is null
-         const fillEndAngle = startAngle + (endAngle - startAngle) * scorePercentage;
+         const scorePercentage = scoreValue !== null ? (scoreValue / 10) : 0;
+         // Vertical fill: calculate radius based on percentage
+         const fillOuterRadius = innerRadius + (outerRadius - innerRadius) * scorePercentage;
 
          // Label positioning logic
          const midAngleRad = (startAngle + endAngle) / 2 * RADIAN;
-         const radius = innerRadius + (outerRadius - innerRadius) * 0.6; // Position label within the slice
-         const x = cx + radius * Math.cos(-midAngleRad);
-         const y = cy + radius * Math.sin(-midAngleRad);
+         const labelRadius = innerRadius + (outerRadius - innerRadius) * 0.6; // Adjust as needed
+         const x = cx + labelRadius * Math.cos(-midAngleRad);
+         const y = cy + labelRadius * Math.sin(-midAngleRad);
+         const labelColor = FOREGROUND_TEXT_COLOR;
 
-         // Label Color: Always use foreground for visibility
-         let labelColor = FOREGROUND_TEXT_COLOR;
-
-         // Simple split for multi-line labels if needed
           const nameParts = displayLabel.split(' ');
           let line1 = displayLabel;
           let line2 = '';
-          // Adjust length threshold and split logic as needed
-          if (displayLabel.length > 12 && nameParts.length > 1) { // Example threshold
+          if (displayLabel.length > 12 && nameParts.length > 1) {
               const midIndex = Math.ceil(nameParts.length / 2);
               line1 = nameParts.slice(0, midIndex).join(' ');
               line2 = nameParts.slice(midIndex).join(' ');
@@ -332,32 +301,31 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
 
         // Determine stroke color and width based on state
         let strokeColor = MUTED_STROKE_COLOR;
-        let strokeWidth = 1; // Default stroke width
+        let strokeWidth = 1;
          if (isSelectionMode) {
              if (isImprovementItem) {
                  strokeColor = SELECTION_COLOR;
-                 strokeWidth = 3; // Thicker stroke for selected items
+                 strokeWidth = 3;
              }
          } else { // Scoring modes
              if (isActive) { // isActive is true only when index === activeIndex
-                strokeColor = ACTIVE_STROKE_COLOR; // Highlight active item for scoring
-                strokeWidth = 3; // Thicker stroke
+                strokeColor = ACTIVE_STROKE_COLOR;
+                strokeWidth = 3;
              }
          }
 
-
         return (
             <g>
-                 {/* Base Sector Shape (Always filled with muted gray) */}
+                 {/* Base Sector Shape (Always visible, filled with muted gray) */}
                   <Sector
                     cx={cx}
                     cy={cy}
                     innerRadius={innerRadius}
-                    outerRadius={outerRadius}
+                    outerRadius={outerRadius} // Full outer radius for the base
                     startAngle={startAngle}
                     endAngle={endAngle}
                     fill={baseFillColor} // Always muted gray
-                    stroke={strokeColor} // Use calculated stroke
+                    stroke={strokeColor} // Use calculated stroke based on interaction/selection
                     strokeWidth={strokeWidth} // Use calculated width
                   />
 
@@ -366,13 +334,12 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
                      <Sector
                          cx={cx}
                          cy={cy}
-                         innerRadius={innerRadius}
-                         // outerRadius should be the full radius for vertical fill appearance
-                         outerRadius={outerRadius} // Use full radius
-                         startAngle={startAngle} // Correct start angle
-                         endAngle={fillEndAngle} // End angle determined by score
-                         fill={scoredFillColor} // Actual score color
-                         stroke="none" // No stroke needed for the fill itself
+                         innerRadius={innerRadius} // Start from inner radius
+                         outerRadius={fillOuterRadius} // End at calculated radius based on score
+                         startAngle={startAngle}
+                         endAngle={endAngle}
+                         fill={scoredFillColor} // Actual score color (category or selection)
+                         stroke="none" // No stroke for the fill part itself
                      />
                  )}
 
@@ -383,9 +350,8 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
                      fill={labelColor} // Always use foreground
                      textAnchor="middle"
                      dominantBaseline="central"
-                     className="text-[8px] sm:text-[10px] pointer-events-none font-medium select-none" // Prevent text selection
+                     className="text-[8px] sm:text-[10px] pointer-events-none font-medium select-none"
                  >
-                   {/* Render tspans for potential multi-line */}
                    <tspan x={x} dy={line2 ? "-0.6em" : "0"}>{line1}</tspan>
                    {line2 && <tspan x={x} dy="1.2em">{line2}</tspan>}
                  </text>
@@ -403,7 +369,7 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
      <div className="flex flex-col w-full gap-6 px-4">
 
          {/* --- Top Section: Controls / Selection Info --- */}
-         <div className="w-full max-w-md mx-auto"> {/* Centered and max-width for controls */}
+         <div className="w-full max-w-md mx-auto">
              {/* --- Scoring Mode Controls --- */}
              {selectedItemId && !isSelectionMode && (
                  <Card className="w-full shadow-md transition-all duration-300 ease-out animate-in fade-in slide-in-from-top-10">
@@ -438,7 +404,7 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
                          </div>
                      </CardContent>
                      <CardFooter className="flex justify-center gap-4 pb-4">
-                         <Button variant="outline" size="sm" onClick={() => { setSelectedItemId(null); setActiveIndex(null); }}>Cancelar</Button> {/* Deactivate on cancel */}
+                         <Button variant="outline" size="sm" onClick={() => { setSelectedItemId(null); setActiveIndex(null); }}>Cancelar</Button>
                          <Button size="sm" onClick={confirmScore}>Confirmar Nota</Button>
                      </CardFooter>
                  </Card>
@@ -469,9 +435,9 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
                                     return (
                                         <Badge
                                             key={item.itemId}
-                                            variant="destructive" // Maps visually to selection color
-                                            className="text-sm font-normal cursor-pointer flex items-center gap-1 px-3 py-1" // Increased padding
-                                            onClick={() => removeImprovementItem(item.itemId)} // Allow removing by clicking badge
+                                            variant="destructive"
+                                            className="text-sm font-normal cursor-pointer flex items-center gap-1 px-3 py-1"
+                                            onClick={() => removeImprovementItem(item.itemId)}
                                             title={`Clique para remover "${details?.name}"`}
                                         >
                                             {details?.name}
@@ -500,37 +466,39 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
         <div className="flex flex-col lg:flex-row items-start w-full gap-6">
 
             {/* Chart Area */}
-            <div className="relative w-full lg:w-2/3 max-w-3xl mx-auto aspect-square"> {/* Chart takes more space on large */}
+            <div className="relative w-full lg:w-2/3 max-w-3xl mx-auto aspect-square">
                  <ResponsiveContainer width="100%" height="100%">
                      <PieChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
                        <Pie
                          data={pieData}
                          cx="50%"
                          cy="50%"
-                         labelLine={false} // Lines disabled
-                         outerRadius="95%" // Adjust as needed
-                         innerRadius="25%" // Adjust as needed for donut hole size
-                         dataKey="value" // `value: 1` makes all slices equal size
+                         labelLine={false}
+                         outerRadius="95%"
+                         innerRadius="25%"
+                         dataKey="value"
                          onClick={handlePieClick}
-                         animationDuration={0} // Disable animation on click/update to prevent flicker
+                         // Keep animation duration 0 or low to prevent weird transitions on update
+                         animationDuration={0}
                          className="cursor-pointer focus:outline-none"
-                         startAngle={90} // Start at the top
-                         endAngle={-270} // Go full circle
-                         stroke="none" // Base stroke removed, handled by activeShape
-                         activeIndex={activeIndex ?? undefined} // Control which sector uses renderActiveShape (for scoring)
+                         startAngle={90}
+                         endAngle={-270}
+                         stroke="none"
+                         activeIndex={activeIndex ?? undefined} // Control visual highlight during scoring interaction
                          activeShape={(props: any) => renderActiveShape({ ...props, isActive: props.index === activeIndex })}
-                         isAnimationActive={false} // Disable animation generally
-                         label={false} // Disable default label rendering from Pie component
+                         // Ensure isAnimationActive is false to prevent flickering on data updates
+                         isAnimationActive={false}
+                         label={false}
                          inactiveShape={(props: any) => renderActiveShape({ ...props, isActive: false })} // Render all shapes consistently
                        >
-                        {/* Cells still needed for Recharts internal mapping. Fill is now handled by renderActiveShape */}
+                        {/* Key needs to be stable but also reflect data changes */}
                          {pieData.map((entry, index) => (
                               <Cell
-                               key={`cell-${entry.itemId}-${entry.scoreValue}`} // Include scoreValue in key to force re-render on change
-                               fill={MUTED_FILL_COLOR} // Pass base muted color, renderActiveShape decides final fill
-                               stroke="none" // No stroke on the cell itself
+                               key={`cell-${entry.itemId}`} // Use stable itemId, renderActiveShape handles score changes
+                               fill={MUTED_FILL_COLOR} // Passed to renderActiveShape, but it decides final fill
+                               stroke="none"
                                className="focus:outline-none transition-opacity duration-300 hover:opacity-90"
-                               tabIndex={-1} // Pie handles focus
+                               tabIndex={-1}
                                aria-label={`${entry.name}: ${entry.scoreValue ?? (isSelectionMode ? (entry.isImprovementItem ? 'Selecionado' : 'Não selecionado') : 'Não avaliado')}`}
                              />
                          ))}
@@ -539,7 +507,6 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
                      </PieChart>
                  </ResponsiveContainer>
 
-                  {/* Center Icon/Text */}
                   <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center -mt-2">
                       {scoreType === 'current' && <Target className="w-8 h-8 sm:w-10 sm:h-10 text-primary mb-1"/>}
                       {scoreType === 'desired' && <CheckCircle className="w-8 h-8 sm:w-10 sm:h-10 text-primary mb-1"/>}
@@ -550,23 +517,20 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
                   </div>
                </div>
 
-             {/* Category Percentages Display Area (Sidebar on large screens) */}
-             <div className="w-full lg:w-1/3 flex flex-col items-center gap-6"> {/* Takes remaining space on large */}
+             <div className="w-full lg:w-1/3 flex flex-col items-center gap-6">
                  <CategoryScoresDisplay scoreType="combined" />
              </div>
         </div>
 
 
-        {/* Navigation Buttons (moved to the bottom of the overall layout) */}
-        <div className="mt-4 flex justify-between w-full max-w-5xl mx-auto"> {/* Max width and centered */}
+        <div className="mt-4 flex justify-between w-full max-w-5xl mx-auto">
             <Button variant="outline" onClick={() => goToStage(prevStage)}>
               <ArrowLeft className="mr-2 h-4 w-4" /> Voltar
             </Button>
             <Button onClick={() => goToStage(nextStage)} disabled={isNextDisabled}>
-                Próximo <ArrowRight className="ml-2 h-4 w-4" />
+               Próximo <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
         </div>
-        {/* Messages for disabled Next button */}
          {isNextDisabled && !isSelectionMode && (
              <p className="text-xs text-destructive text-center mt-2 w-full max-w-5xl mx-auto">
                  Por favor, avalie todos os itens antes de prosseguir.
@@ -580,5 +544,3 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
      </div>
    );
 };
-
-    
