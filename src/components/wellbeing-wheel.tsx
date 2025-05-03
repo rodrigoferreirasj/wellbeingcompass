@@ -8,7 +8,7 @@ import { wellbeingItems, wellbeingCategories, ItemScore, getCategoryForItem, get
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { ArrowRight, ArrowLeft, CheckCircle, Target, Star, Minus, Plus, TrendingUp } from 'lucide-react';
+import { ArrowRight, ArrowLeft, CheckCircle, Target, Star, TrendingUp } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
 import { ActionPlan } from './action-plan';
@@ -91,29 +91,37 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
   }, [selectedItemData, scoreType, isSelectionMode, selectedItemId, isItemSelectedForImprovement]);
 
 
-  const handlePieClick = useCallback((entry: PieDataItem) => {
-    const itemId = entry.itemId;
+  // FIX: Use payload data to get the correct itemId on click
+  const handlePieClick = useCallback((data: any, index: number) => {
+    // data.payload contains the actual PieDataItem passed to the Cell
+    const clickedItem = data.payload as PieDataItem;
+    if (!clickedItem || !clickedItem.itemId) {
+        console.error("Pie click error: Invalid payload data", data);
+        return; // Exit if payload is invalid
+    }
+    const itemId = clickedItem.itemId;
 
     if (isSelectionMode) {
-      if (isItemSelectedForImprovement(itemId)) {
-        // If clicking an already selected item, deselect it
-        removeImprovementItem(itemId);
-        setSelectedItemId(null); // Deselect for action plan view
-      } else {
-        // Select the item if limit not reached
-        if (improvementItems.length < 3) {
-          selectImprovementItem(itemId);
-          setSelectedItemId(itemId); // Select for action plan view
+        if (isItemSelectedForImprovement(itemId)) {
+            // If clicking an already selected item, deselect it
+            removeImprovementItem(itemId);
+            setSelectedItemId(null); // Deselect for action plan view
         } else {
-          toast({ title: "Limite Atingido", description: "Você já selecionou 3 itens para melhorar.", variant: "destructive" });
-          setSelectedItemId(null); // Don't select if limit reached
+            // Select the item if limit not reached
+            if (improvementItems.length < 3) {
+                selectImprovementItem(itemId);
+                setSelectedItemId(itemId); // Select for action plan view
+            } else {
+                toast({ title: "Limite Atingido", description: "Você já selecionou 3 itens para melhorar.", variant: "destructive" });
+                setSelectedItemId(null); // Don't select if limit reached
+            }
         }
-      }
     } else {
-      // Scoring modes: set the selected item for the slider
-       setSelectedItemId(itemId);
+        // Scoring modes: set the selected item for the slider
+        setSelectedItemId(itemId);
     }
   }, [isSelectionMode, isItemSelectedForImprovement, removeImprovementItem, improvementItems.length, selectImprovementItem, toast]);
+
 
   const handleSliderChange = (value: number[]) => {
     setSliderValue(value[0]);
@@ -172,8 +180,22 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
     const numItems = wellbeingItems.length;
     const anglePerItem = 360 / numItems;
 
-    return wellbeingItems
-      .map((item, index) => {
+    // Sort items first by category index, then by original index within category
+    const sortedItems = [...wellbeingItems].sort((a, b) => {
+        const catAIndex = wellbeingCategories.findIndex(c => c.id === a.categoryId);
+        const catBIndex = wellbeingCategories.findIndex(c => c.id === b.categoryId);
+        if (catAIndex !== catBIndex) {
+            return catAIndex - catBIndex;
+        }
+        // Find original index if needed, or rely on initial array order if stable
+        const originalIndexA = wellbeingItems.findIndex(item => item.id === a.id);
+        const originalIndexB = wellbeingItems.findIndex(item => item.id === b.id);
+        return originalIndexA - originalIndexB;
+    });
+
+
+    return sortedItems
+      .map((item, index) => { // Index here is the index *after sorting*
         const category = getCategoryForItem(item.id);
         const itemScoreData = itemScores.find(s => s.itemId === item.id) || { itemId: item.id, currentScore: null, desiredScore: null };
         const categoryColor = category?.color ?? 'hsl(var(--secondary))'; // Fallback color
@@ -211,7 +233,7 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
         }
 
          // Basic calculation for midAngle (adjust startAngle as needed)
-         const startAngle = index * anglePerItem;
+         const startAngle = index * anglePerItem; // Use index *after sorting*
          const endAngle = startAngle + anglePerItem;
          const midAngle = startAngle + anglePerItem / 2;
 
@@ -225,21 +247,12 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
           fillColor: calculateFillColor(itemScoreData, categoryColor),
           label: labelValue.toString(), // Convert to string for the Label component
           difference: difference,
-          order: index, // Keep original order for sorting consistency
+          order: index, // Store the sorted order index if needed, or original index if preferred
           // Dummy values for radius, will be calculated by Recharts
           midAngle: midAngle,
           innerRadius: 0, // Placeholder
           outerRadius: 0, // Placeholder
         };
-      })
-       // Sort primarily by category, then by original item order within category
-      .sort((a, b) => {
-         const catAIndex = wellbeingCategories.findIndex(c => c.name === a.categoryName);
-         const catBIndex = wellbeingCategories.findIndex(c => c.name === b.categoryName);
-         if (catAIndex !== catBIndex) {
-             return catAIndex - catBIndex;
-         }
-         return a.order - b.order; // Maintain original order within category
       });
   }, [itemScores, scoreType, isSelectionMode, isItemSelectedForImprovement, calculateFillColor]);
 
@@ -433,9 +446,10 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
            )}
 
            {/* Category Scores Display */}
-           <CategoryScoresDisplay scoreType={scoreType} />
+           <CategoryScoresDisplay scoreType={scoreType === 'select' ? 'desired' : scoreType} /> {/* Show desired scores in select mode */}
 
-           {/* Action Plan Area (only in select mode) - Moved below chart */}
+
+           {/* Action Plan Area (only in select mode) - Shown below category scores */}
            {isSelectionMode && (
               <div className="mt-4 lg:hidden"> {/* Show only on smaller screens here */}
                 <h3 className="text-xl font-semibold mb-4 text-center text-primary">
@@ -468,7 +482,7 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
                      outerRadius="75%" // Increased outer radius
                      innerRadius="30%" // Keep inner radius reasonable
                      dataKey="value"
-                     onClick={(_, index) => handlePieClick(pieData[index])}
+                     onClick={handlePieClick} // Pass the raw event data
                      animationDuration={500}
                      animationEasing="ease-out"
                      className="cursor-pointer focus:outline-none"
@@ -488,7 +502,7 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
                            strokeWidth={isSelected ? 3 : 1}
                            className="focus:outline-none transition-all duration-300 hover:opacity-80"
                            tabIndex={0}
-                           // Ensure payload is passed correctly for tooltip
+                           // Ensure payload is passed correctly for tooltip and click handler
                             payload={entry} // Pass the entry data as payload
                            aria-label={`${entry.name}: ${isSelectionMode ? (isItemSelectedForImprovement(entry.itemId) ? 'Selecionado' : 'Clique para selecionar') : (scoreKey && entry[scoreKey] !== null ? entry[scoreKey] : 'Não avaliado')}`}
                          />
@@ -549,7 +563,7 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
            {isNextDisabled && isSelectionMode && (
                 <p className="text-xs text-destructive text-center mt-2 max-w-lg">
                    Selecione pelo menos um item para melhorar antes de prosseguir.
-               </p>
+                </p>
            )}
         </div>
 
