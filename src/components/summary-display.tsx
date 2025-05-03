@@ -8,11 +8,12 @@ import { wellbeingItems, wellbeingCategories, getItemDetails, getCategoryForItem
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Printer, RotateCcw, TrendingUp, Calendar, Send } from 'lucide-react'; // Send is no longer used
+import { RotateCcw, TrendingUp, Calendar, Send, Printer } from 'lucide-react'; // Send is no longer used
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { CategoryScoresDisplay } from './category-scores-display';
+import * as htmlToImage from 'html-to-image';
 
 
 export const SummaryDisplay: React.FC = () => {
@@ -26,74 +27,19 @@ export const SummaryDisplay: React.FC = () => {
   }, []);
 
 
-  const handlePrint = () => {
-    const printContents = printRef.current?.innerHTML;
-    if (printContents && window) {
-       const printWindow = window.open('', '_blank', 'height=800,width=1000');
-       if (printWindow) {
-            printWindow.document.write(`
-              <html>
-              <head>
-                <title>Wellbeing Compass - Resumo</title>
-                <style>
-                    body { font-family: Arial, sans-serif; margin: 20px; color: #333; }
-                    .print-container { width: 100%; }
-                    h1 { text-align: center; color: #008080; margin-bottom: 30px; } /* Teal */
-                    .section { margin-bottom: 25px; border: 1px solid #eee; padding: 20px; border-radius: 8px; background-color: #fff; page-break-inside: avoid; } /* Avoid breaking sections */
-                    h2 { color: #008080; /* Teal */ border-bottom: 1px solid #ccc; padding-bottom: 8px; margin-bottom: 15px; font-size: 1.4em;}
-                    h3 { color: #333; margin-top: 20px; margin-bottom: 10px; font-size: 1.1em; }
-                    ul { list-style: none; padding: 0; }
-                    li { margin-bottom: 10px; line-height: 1.5; }
-                    strong { font-weight: bold; }
-                    .category-summary li { border-bottom: 1px dotted #eee; padding-bottom: 5px; }
-                    .item-score { margin-left: 15px; padding-left: 15px; border-left: 2px solid #eee; margin-top: 5px; }
-                    .item-score strong { color: #555; }
-                    .action-plan .item-section { margin-bottom: 20px; }
-                    .action-plan h3 { border-bottom: none; margin-bottom: 5px; }
-                    .action-item { margin-left: 20px; margin-bottom: 8px; font-size: 0.95em; }
-                    .action-item p { margin: 2px 0; }
-                    .category-scores-display { margin-bottom: 30px; }
-                    /* Table Styling */
-                    table { width: 100%; border-collapse: collapse; margin-top: 15px; page-break-inside: auto; } /* Allow table content to break across pages */
-                    tr { page-break-inside: avoid; page-break-after: auto; } /* Avoid breaking rows */
-                    th, td { border: 1px solid #ddd; padding: 10px 12px; text-align: left; font-size: 0.9em; }
-                    th { background-color: #f2f2f2; color: #333; font-weight: bold; }
-                    td span { margin-left: 5px; }
-                    thead { display: table-header-group; } /* Repeat header on each page */
-                     @media print {
-                        body { margin: 0; color: #000; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-                        .no-print { display: none; }
-                        .print-container { border: none; padding: 0; box-shadow: none; }
-                        .section { border: none; padding: 0; border-radius: 0; margin-bottom: 20px; background-color: transparent; }
-                        h1, h2 { color: #000 !important; }
-                        h3 { color: #000 !important; }
-                        .category-summary li { border-color: #ccc; }
-                        .item-score { border-left-color: #ccc; }
-                        .progress-indicator-custom { background-color: var(--progress-color, #ccc) !important; /* Fallback color */ }
-                        progress { color: var(--progress-color, #ccc) !important; } /* Might not work consistently */
-                        table { page-break-inside: auto; }
-                        tr { page-break-inside: avoid; page-break-after: auto; }
-                        thead { display: table-header-group; }
-                        tfoot { display: table-footer-group; }
-                     }
-                </style>
-              </head>
-              <body>
-                <div class="print-container">
-                    <h1>Resumo da Roda do Bem-Estar</h1>
-                    ${printContents}
-                 </div>
-              </body>
-              </html>
-            `);
-            printWindow.document.close();
-            printWindow.focus();
-            // Delay print slightly to allow content rendering
-            setTimeout(() => {
-                 printWindow.print();
-                 // Optional: close window after printing
-                 // printWindow.close();
-            }, 500);
+  const handleDownload = async () => {
+    if (printRef.current) {
+        try {
+            const dataUrl = await htmlToImage.toPng(printRef.current);
+
+            const link = document.createElement('a');
+            link.href = dataUrl;
+            link.download = `wellbeing-compass-summary.png`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        } catch (error) {
+            console.error("Error downloading image:", error);
         }
     }
   };
@@ -227,9 +173,9 @@ export const SummaryDisplay: React.FC = () => {
                 <Button variant="outline" onClick={handleRestart}>
                 <RotateCcw className="mr-2 h-4 w-4" /> Reiniciar Avaliação
                 </Button>
-                <Button onClick={handlePrint}>
-                <Printer className="mr-2 h-4 w-4" /> Imprimir / Salvar PDF
-                </Button>
+                 <Button onClick={handleDownload}>
+                  Download dos resultados
+               </Button>
              </div>
              {/* Removed Send to coach button */}
              {/*

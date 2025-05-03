@@ -1,7 +1,7 @@
 
 'use client';
 
-import React from 'react';
+import React, { useRef } from 'react';
 import Link from 'next/link'; // Import Link for the button
 import { useAssessment } from '@/context/AssessmentContext';
 import { UserInfoForm } from './user-info-form';
@@ -12,10 +12,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button'; // Import Button
 import { Calendar } from 'lucide-react'; // Import icon if needed
+import * as htmlToImage from 'html-to-image';
 
 export const AssessmentWizard: React.FC = () => {
-  const { assessmentData } = useAssessment();
+  const { assessmentData, goToStage } = useAssessment();
   const { stage } = assessmentData;
+    const componentRef = useRef<HTMLDivElement>(null);
 
   const stageComponents: { [key in typeof stage]: React.ReactNode } = {
     userInfo: <UserInfoForm />,
@@ -55,9 +57,26 @@ export const AssessmentWizard: React.FC = () => {
 
   const currentStageProgress = stageProgress[stage];
 
+  const handleDownload = async () => {
+      if (componentRef.current) {
+          try {
+              const dataUrl = await htmlToImage.toPng(componentRef.current);
+
+              const link = document.createElement('a');
+              link.href = dataUrl;
+              link.download = `wellbeing-compass-${stage}.png`;
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+          } catch (error) {
+              console.error("Error downloading image:", error);
+          }
+      }
+  };
+
   return (
     // Wrap Card and Footer in a flex column container to keep footer below card
-    <div className="flex flex-col items-center w-full max-w-7xl gap-6">
+    <div className="flex flex-col items-center w-full max-w-7xl gap-6" ref={componentRef}>
       <Card className="w-full shadow-lg">
         <CardHeader>
           <div className="flex flex-col sm:flex-row justify-between items-start mb-4 gap-4">
@@ -102,6 +121,13 @@ export const AssessmentWizard: React.FC = () => {
             </Button>
         </div>
        )}
+
+       {/* Download Button Section - always visible */}
+       <div className="w-full text-center p-4 mt-4 bg-muted/50 rounded-lg">
+            <Button size="sm" onClick={handleDownload}>
+                   Download dos resultados
+            </Button>
+        </div>
     </div>
   );
 };
