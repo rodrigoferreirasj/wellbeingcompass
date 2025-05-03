@@ -507,7 +507,7 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType }) => 
                 Por favor, avalie todos os itens antes de prosseguir.
             </p>
         )}
-        {isNextDisabled() && isSelectionMode && (
+        {isNextDisabled && isSelectionMode && (
              <p className="text-xs text-destructive text-center mt-2 max-w-lg">
                 Selecione pelo menos um item para melhorar antes de prosseguir.
             </p>
