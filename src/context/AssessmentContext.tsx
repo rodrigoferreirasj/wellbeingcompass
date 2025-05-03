@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useCallback, Dispatch, SetStateAction } from 'react';
@@ -13,11 +12,12 @@ import type {
   WellbeingItem,
   ActionItem
 } from '@/types/assessment';
-import { initialItemScores, wellbeingCategories, wellbeingItems, getCategoryForItem, getItemDetails, generateActionId } from '@/types/assessment'; // Added generateActionId
-// Removed email-service import as it's no longer used server-side
+import { initialItemScores, wellbeingCategories, wellbeingItems, getCategoryForItem, getItemDetails, generateActionId } from '@/types/assessment';
 import { useToast } from "@/hooks/use-toast";
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { httpsCallable } from 'firebase/functions'; // Import Firebase functions
+import { functions } from '@/lib/firebase'; // Import initialized functions instance
 
 // Interface for average scores (kept for potential internal use or chart)
 interface CategoryScore {
@@ -49,8 +49,7 @@ interface AssessmentContextProps {
   removeActionItem: (itemId: string, actionIndex: number) => void; // For clearing text/date
   addActionItemSlot: (itemId: string) => void; // Added function to add new action slot
   goToStage: (stage: AssessmentStage) => void;
-  submitAssessment: () => Promise<void>; // This transitions to summary
-  // Removed sendResultsToCoach as it's handled client-side now
+  submitAssessment: () => Promise<void>; // This transitions to summary and saves data
   isItemSelectedForImprovement: (itemId: string) => boolean;
   calculateCategoryScores: () => CategoryScore[]; // Calculates averages
   calculateCategoryPercentages: () => CategoryPercentage[]; // Calculates percentages
@@ -422,7 +421,7 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
   }, [assessmentData]);
 
 
-  // Function to just move to the summary stage after defineActions
+  // Function to submit assessment: Validate, save data via Cloud Function, then go to summary
   const submitAssessment = useCallback(async () => {
      const validation = validateAssessmentCompletion();
      if (!validation.valid) {
@@ -435,21 +434,48 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
             });
         } catch (e) { console.error("Toast failed:", e); }
         if (validation.stage) {
-            goToStage(validation.stage); // No need to cast if interface includes it
+            goToStage(validation.stage);
         }
         return;
      }
 
-     // If validation passes, simply go to summary
-     goToStage('summary');
+     // Validation passed, try saving data to Firebase
      try {
-         toast({
-            title: "Revisão Pronta",
-            description: "Revise sua avaliação e plano de ação no resumo.",
-         });
-     } catch (e) { console.error("Toast failed:", e); }
+       const saveAssessmentDataFunction = httpsCallable(functions, 'saveAssessmentData');
+       // Prepare data to send (remove stage, potentially serialize dates if needed)
+        const dataToSend = {
+           ...assessmentData,
+           stage: undefined, // Don't save stage to Firestore
+            improvementItems: assessmentData.improvementItems.map(item => ({
+                ...item,
+                actions: item.actions.map(action => ({
+                ...action,
+                // Firestore handles Date objects, but ensure it's Date or null
+                completionDate: action.completionDate ? action.completionDate : null,
+                }))
+            })),
+        };
+       const result = await saveAssessmentDataFunction(dataToSend);
+       console.log('Assessment data saved successfully:', result.data);
+       toast({
+           title: "Avaliação Salva",
+           description: "Seus dados foram salvos com sucesso.",
+       });
 
-  }, [validateAssessmentCompletion, goToStage, toast]);
+       // Proceed to summary only after successful save
+       goToStage('summary');
+
+     } catch (error: any) {
+       console.error("Error saving assessment data via Cloud Function:", error);
+       toast({
+           title: "Erro ao Salvar",
+           description: `Não foi possível salvar seus dados: ${error.message}. Por favor, tente novamente.`,
+           variant: "destructive",
+       });
+       // Do not proceed to summary if save fails
+     }
+
+  }, [validateAssessmentCompletion, goToStage, toast, assessmentData]);
 
   // Function to reset the assessment state to initial values
   const resetAssessment = useCallback(() => {
@@ -477,8 +503,7 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
     removeActionItem, // Function to remove action by index
     addActionItemSlot, // Function to add new action slot
     goToStage,
-    submitAssessment, // Moves to summary
-    // sendResultsToCoach removed
+    submitAssessment, // Moves to summary and saves data
     isItemSelectedForImprovement,
     calculateCategoryScores, // Calculates averages
     calculateCategoryPercentages, // Calculates percentages

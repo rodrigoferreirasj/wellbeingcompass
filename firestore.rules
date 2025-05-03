@@ -1,0 +1,13 @@
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow anyone to write to the assessments collection for now.
+    // TODO: Secure this rule, e.g., allow only authenticated users
+    // or validate data structure.
+    match /assessments/{assessmentId} {
+      allow read, write: if true;
+    }
+  }
+}
