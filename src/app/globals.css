@@ -9,76 +9,83 @@ body {
 
 @layer base {
   :root {
-    --background: 0 0% 100%; /* White */
-    --foreground: 0 0% 3.9%; /* Near Black */
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 3.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.9%;
-    --primary: 180 100% 25.1%; /* Teal */
-    --primary-foreground: 0 0% 100%; /* White */
-    --secondary: 0 0% 94.1%; /* Soft Gray */
-    --secondary-foreground: 0 0% 9%; /* Near Black */
-    --muted: 0 0% 94.1%; /* Soft Gray */
-    --muted-foreground: 0 0% 45.1%; /* Medium Gray */
-    --accent: 39 100% 50%; /* Vibrant Orange */
-    --accent-foreground: 0 0% 9%; /* Near Black */
-    --destructive: 0 84.2% 60.2%;
+    --background: 30 100% 99%; /* #FFFCFA - Off-White/Cream */
+    --foreground: 248 17% 23%; /* #322E46 - Dark Purple/Indigo */
+    --card: 30 100% 99%;
+    --card-foreground: 248 17% 23%;
+    --popover: 30 100% 99%;
+    --popover-foreground: 248 17% 23%;
+    --primary: 257 35% 32%; /* #483670 - Deep Purple */
+    --primary-foreground: 30 100% 99%; /* #FFFCFA - For text on primary */
+    --secondary: 250 37% 92%; /* Lighter version of #554696 - Pale Lavender */
+    --secondary-foreground: 257 35% 25%; /* Darker purple for text on pale lavender */
+    --muted: 250 37% 95%; /* Even paler lavender */
+    --muted-foreground: 248 17% 40%; /* Medium-dark purple */
+    --accent: 191 57% 56%; /* #50BED0 - Sky Blue/Cyan */
+    --accent-foreground: 248 17% 23%; /* Dark text for contrast on accent */
+    --destructive: 0 84.2% 60.2%; /* Standard Red */
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
-    --ring: 180 100% 25.1%; /* Teal for focus rings */
-    --chart-1: 180 100% 25.1%; /* Teal */
-    --chart-2: 39 100% 50%;   /* Orange */
-    --chart-3: 210 40% 56.1%; /* Muted Blue */
-    --chart-4: 142 71% 45.3%; /* Green */
-    --chart-5: 262 84% 58%;  /* Purple */
+    --border: 250 37% 88%; /* Pale lavender border */
+    --input: 250 37% 90%; /* Slightly darker pale lavender for input */
+    --ring: 191 57% 56%; /* #50BED0 - Sky Blue for focus rings */
+    
+    --chart-1: 207 53% 52%; /* #458CC3 - Steel Blue */
+    --chart-2: 45 45% 66%;  /* #D2BC7F - Tan/Gold */
+    --chart-3: 172 38% 63%; /* #7AC7BF - Teal/Turquoise */
+    --chart-4: 250 37% 43%; /* #554696 - Purple */
+    --chart-5: 191 57% 56%; /* #50BED0 - Sky Blue/Cyan (distinct from accent if primary changes) */
+    
     --radius: 0.5rem;
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+
+    --sidebar-background: 30 100% 98%; /* Lighter than main light bg */
+    --sidebar-foreground: 248 17% 23%; /* #322E46 */
+    --sidebar-primary: 257 35% 32%; /* #483670 */
+    --sidebar-primary-foreground: 30 100% 99%; /* #FFFCFA */
+    --sidebar-accent: 250 37% 92%; /* Pale lavender */
+    --sidebar-accent-foreground: 257 35% 25%; /* Darker purple */
+    --sidebar-border: 250 37% 88%; /* Pale lavender border */
+    --sidebar-ring: 191 57% 56%; /* #50BED0 */
 
     /* Custom property for progress bar color */
     --progress-color: hsl(var(--primary));
   }
+
   .dark {
-    --background: 0 0% 3.9%; /* Near Black */
-    --foreground: 0 0% 98%; /* White */
-    --card: 0 0% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 180 70% 60%; /* Lighter Teal */
-    --primary-foreground: 180 100% 10%; /* Dark Teal/Black */
-    --secondary: 0 0% 10%; /* Dark Gray */
-    --secondary-foreground: 0 0% 94.1%; /* Light Gray */
-    --muted: 0 0% 10%; /* Dark Gray */
-    --muted-foreground: 0 0% 63.9%; /* Lighter Gray */
-    --accent: 39 90% 55%; /* Adjusted Orange */
-    --accent-foreground: 0 0% 9%; /* Near Black */
-    --destructive: 0 62.8% 30.6%;
+    --background: 248 17% 23%; /* #322E46 - Dark Purple/Indigo */
+    --foreground: 30 100% 99%; /* #FFFCFA - Off-White/Cream */
+    --card: 248 17% 23%;
+    --card-foreground: 30 100% 99%;
+    --popover: 248 17% 23%;
+    --popover-foreground: 30 100% 99%;
+    --primary: 191 57% 65%; /* Brighter #50BED0 - Sky Blue/Cyan for dark mode primary */
+    --primary-foreground: 248 17% 15%; /* Very dark purple for text on light blue primary */
+    --secondary: 257 35% 28%; /* #483670 - Deep Purple, slightly distinct from bg */
+    --secondary-foreground: 30 100% 95%; /* Lighter off-white */
+    --muted: 257 35% 25%; /* Darker than secondary */
+    --muted-foreground: 30 100% 80%; /* Muted off-white */
+    --accent: 172 38% 70%; /* Brighter #7AC7BF - Teal/Turquoise for dark mode accent */
+    --accent-foreground: 248 17% 15%; /* Very dark purple for text on teal accent */
+    --destructive: 0 70% 55%; /* Adjusted Red for dark mode */
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 180 70% 60%; /* Lighter Teal for focus rings */
-    --chart-1: 180 70% 60%; /* Lighter Teal */
-    --chart-2: 39 90% 55%;   /* Orange */
-    --chart-3: 210 40% 56.1%; /* Muted Blue */
-    --chart-4: 142 71% 45.3%; /* Green */
-    --chart-5: 262 84% 58%;  /* Purple */
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --border: 257 35% 20%; /* Darker border */
+    --input: 257 35% 26%; /* Input bg for dark mode */
+    --ring: 172 38% 70%; /* #7AC7BF - Teal for rings in dark mode */
+
+    /* Chart colors remain the same as light mode, they should be chosen for visibility on both */
+    --chart-1: 207 53% 52%;
+    --chart-2: 45 45% 66%;
+    --chart-3: 172 38% 63%;
+    --chart-4: 250 37% 43%;
+    --chart-5: 191 57% 56%;
+
+    --sidebar-background: 248 17% 18%; /* Slightly lighter dark purple than main dark bg */
+    --sidebar-foreground: 30 100% 99%; /* #FFFCFA */
+    --sidebar-primary: 191 57% 65%; /* Brighter #50BED0 */
+    --sidebar-primary-foreground: 248 17% 15%; /* Very dark purple */
+    --sidebar-accent: 257 35% 28%; /* #483670 */
+    --sidebar-accent-foreground: 30 100% 95%; /* Lighter off-white */
+    --sidebar-border: 257 35% 20%; /* Darker border */
+    --sidebar-ring: 172 38% 70%; /* Brighter #7AC7BF */
 
      /* Custom property for progress bar color in dark mode */
     --progress-color: hsl(var(--primary));
