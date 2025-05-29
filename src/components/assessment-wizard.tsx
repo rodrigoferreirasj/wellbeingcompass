@@ -8,6 +8,7 @@ import { UserInfoForm } from './user-info-form';
 import { WellbeingWheel } from './wellbeing-wheel';
 import { ActionPlan } from './action-plan';
 import { SummaryDisplay } from './summary-display';
+import { PaymentPage } from './payment-page'; // Import the new PaymentPage
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button'; // Import Button
@@ -15,22 +16,55 @@ import { Calendar } from 'lucide-react'; // Import icon if needed
 import * as htmlToImage from 'html-to-image';
 
 export const AssessmentWizard: React.FC = () => {
-  const { assessmentData, goToStage } = useAssessment();
+  const { assessmentData, goToStage, submitAssessment } = useAssessment(); // Added submitAssessment
   const { stage } = assessmentData;
-    const componentRef = useRef<HTMLDivElement>(null);
+  const componentRef = useRef<HTMLDivElement>(null);
+
+  const handleNextStageWithDownload = async () => {
+    if (componentRef.current) {
+        try {
+            const dataUrl = await htmlToImage.toPng(componentRef.current, { 
+              quality: 0.95, 
+              backgroundColor: '#FFFCFA' // Match body background
+            });
+            const link = document.createElement('a');
+            link.href = dataUrl;
+            link.download = `wellbeing-compass-${stage}.png`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        } catch (error) {
+            console.error("Error downloading image on stage transition:", error);
+        }
+    }
+    // Determine next stage logic from context or specific components
+    // For most stages, the next stage is determined within the component itself (e.g., WellbeingWheel, ActionPlan)
+    // For UserInfoForm, it's handled in its onSubmit
+    // For PaymentPage, it will handle its own transition
+    if (stage === 'userInfo') goToStage('currentScore'); // Example, actual logic might be in UserInfoForm
+    // If on summary, submitAssessment handles it (though there's no 'Next' from summary)
+    else if (stage === 'summary') {
+        // No "Next" from summary, but if there was a final action:
+        // await submitAssessment(); // Example
+    }
+    // Other stage transitions are handled within their respective components or the context's goToStage calls
+  };
+
 
   const stageComponents: { [key in typeof stage]: React.ReactNode } = {
     userInfo: <UserInfoForm />,
-    currentScore: <WellbeingWheel scoreType="current" />,
-    desiredScore: <WellbeingWheel scoreType="desired" />,
-    selectItems: <WellbeingWheel scoreType="select" />, // Only shows the wheel for selection
-    defineActions: <ActionPlan renderAllSelected={true} />, // Shows ActionPlan for all selected items
+    currentScore: <WellbeingWheel scoreType="current" onNext={handleNextStageWithDownload} />,
+    payment: <PaymentPage onNext={handleNextStageWithDownload} />, // Add PaymentPage
+    desiredScore: <WellbeingWheel scoreType="desired" onNext={handleNextStageWithDownload} />,
+    selectItems: <WellbeingWheel scoreType="select" onNext={handleNextStageWithDownload} />,
+    defineActions: <ActionPlan renderAllSelected={true} />, // ActionPlan handles its own "Concluir" which calls submitAssessment
     summary: <SummaryDisplay />,
   };
 
   const stageTitles: { [key in typeof stage]: string } = {
     userInfo: 'Informações Pessoais',
     currentScore: 'Avalie seu Bem-Estar Atual (por Item)',
+    payment: 'Acesso Premium', // New title for payment stage
     desiredScore: 'Defina seu Bem-Estar Desejado (por Item)',
     selectItems: 'Selecione Itens para Melhorar',
     defineActions: 'Defina seu Plano de Ação',
@@ -40,6 +74,7 @@ export const AssessmentWizard: React.FC = () => {
    const stageDescriptions: { [key in typeof stage]: string } = {
     userInfo: 'Por favor, preencha suas informações para começar.',
     currentScore: `Clique em cada item da Roda do Bem-Estar para dar uma nota de 1 a 10 para sua satisfação atual. Veja os percentuais por categoria abaixo.`,
+    payment: 'Para continuar com a avaliação, defina suas metas e crie seu plano de ação, é necessário realizar o pagamento.', // New description
     desiredScore: `Agora, clique novamente em cada item para indicar a nota que você deseja alcançar (1 a 10). Veja a nota atual para referência e os percentuais desejados abaixo.`,
     selectItems: `Selecione até 3 itens para melhorar clicando no gráfico. Clique em "Próximo" para definir as ações.`,
     defineActions: 'Para cada item selecionado, defina pelo menos uma ação com descrição e data de conclusão.',
@@ -49,6 +84,7 @@ export const AssessmentWizard: React.FC = () => {
   const stageProgress: { [key in typeof stage]: number } = {
     userInfo: 0,
     currentScore: 17,
+    payment: 25, // Progress for payment stage
     desiredScore: 34,
     selectItems: 51,
     defineActions: 68,
@@ -57,74 +93,66 @@ export const AssessmentWizard: React.FC = () => {
 
   const currentStageProgress = stageProgress[stage];
 
-  const handleDownload = async () => {
+  const handleDownloadSummary = async () => {
       if (componentRef.current) {
           try {
-              const dataUrl = await htmlToImage.toPng(componentRef.current);
-
+              const dataUrl = await htmlToImage.toPng(componentRef.current, {
+                quality: 0.95,
+                backgroundColor: '#FFFCFA' // Match body background
+              });
               const link = document.createElement('a');
               link.href = dataUrl;
-              link.download = `wellbeing-compass-${stage}.png`;
+              link.download = `wellbeing-compass-summary.png`;
               document.body.appendChild(link);
               link.click();
               document.body.removeChild(link);
           } catch (error) {
-              console.error("Error downloading image:", error);
+              console.error("Error downloading summary image:", error);
           }
       }
   };
 
   return (
-    // Wrap Card and Footer in a flex column container to keep footer below card
-    <div className="flex flex-col items-center w-full max-w-7xl gap-6" ref={componentRef}>
-      <Card className="w-full shadow-lg">
-        <CardHeader>
-          <div className="flex flex-col sm:flex-row justify-between items-start mb-4 gap-4">
-            <div className="flex-1">
-              <CardTitle className="text-2xl font-bold text-primary">{stageTitles[stage]}</CardTitle>
-              <CardDescription className="text-muted-foreground mt-1">{stageDescriptions[stage]}</CardDescription>
+    <div className="flex flex-col items-center w-full max-w-7xl gap-6">
+      <div ref={componentRef} className="w-full"> {/* Ensure this div wraps content to be captured */}
+        <Card className="w-full shadow-lg">
+          <CardHeader>
+            <div className="flex flex-col sm:flex-row justify-between items-start mb-4 gap-4">
+              <div className="flex-1">
+                <CardTitle className="text-2xl font-bold text-primary">{stageTitles[stage]}</CardTitle>
+                <CardDescription className="text-muted-foreground mt-1">{stageDescriptions[stage]}</CardDescription>
+              </div>
+              {stage !== 'userInfo' && stage !== 'summary' && (
+                    <div className="text-sm text-muted-foreground whitespace-nowrap pt-1">
+                        Progresso: {Math.round(currentStageProgress)}%
+                    </div>
+                )}
             </div>
             {stage !== 'userInfo' && stage !== 'summary' && (
-                  <div className="text-sm text-muted-foreground whitespace-nowrap pt-1">
-                      Progresso: {Math.round(currentStageProgress)}%
-                  </div>
-              )}
-          </div>
-          {stage !== 'userInfo' && stage !== 'summary' && (
-              <Progress value={currentStageProgress} className="w-full h-2" />
-          )}
-        </CardHeader>
-        <CardContent className="p-4 md:p-6">
-          {stageComponents[stage]}
-        </CardContent>
-         {/* Footer moved outside CardContent if it shouldn't scroll with content */}
-         {/* Example: Placing Action Plan navigation within CardFooter if needed */}
-         {/* {stage === 'defineActions' && (
-           <CardFooter className="flex justify-between p-4 md:p-6 border-t">
-              <Button variant="outline" onClick={() => goToStage('selectItems')}> ... </Button>
-              <Button onClick={submitAssessment} disabled={!isPlanComplete()}> ... </Button>
-           </CardFooter>
-         )} */}
-      </Card>
+                <Progress value={currentStageProgress} className="w-full h-2" />
+            )}
+          </CardHeader>
+          <CardContent className="p-4 md:p-6">
+            {stageComponents[stage]}
+          </CardContent>
+        </Card>
+      </div>
 
-       {/* New Footer Section below the Card */}
-       {stage !== 'summary' && ( // Optionally hide on summary stage
+       {stage !== 'summary' && (
         <div className="w-full text-center p-4 border-t border-border mt-4 bg-muted/50 rounded-lg">
             <p className="text-sm text-muted-foreground mb-3">
                 Agora, para analisar seus dados e te ajudar com seu plano de ação, entre em contato com o Coach Rodrigo Ferreira e agende uma devolutiva grátis sobre o seu resultado.
             </p>
             <Button asChild size="sm">
                 <Link href="https://cal.com/pontosfortes/sessao-gratis" target="_blank" rel="noopener noreferrer">
-                    {/* <Calendar className="mr-2 h-4 w-4" /> Optional Icon */}
                     Agendar devolutiva grátis
                 </Link>
             </Button>
         </div>
        )}
 
-       {/* Download Button Section - always visible */}
        <div className="w-full text-center p-4 mt-4 bg-muted/50 rounded-lg">
-            <Button size="sm" onClick={handleDownload}>
+            <Button size="sm" onClick={handleDownloadSummary}>
                    Download dos resultados
             </Button>
         </div>

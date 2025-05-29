@@ -38,7 +38,7 @@ export interface ImprovementItem {
 }
 
 // Stages might need adjustment based on new flow
-export type AssessmentStage = 'userInfo' | 'currentScore' | 'desiredScore' | 'selectItems' | 'defineActions' | 'summary';
+export type AssessmentStage = 'userInfo' | 'currentScore' | 'payment' | 'desiredScore' | 'selectItems' | 'defineActions' | 'summary';
 
 export interface AssessmentData {
   userInfo: UserInfo | null;
@@ -49,17 +49,15 @@ export interface AssessmentData {
 
 // Define Categories
 export const wellbeingCategories: WellbeingCategory[] = [
-  { id: 'career', name: 'Carreira', color: 'hsl(var(--chart-1))' }, // Teal
-  { id: 'social', name: 'Social', color: 'hsl(var(--chart-2))' }, // Orange
-  { id: 'financial', name: 'Financeiro', color: 'hsl(var(--chart-3))' }, // Muted Blue
-  { id: 'physical', name: 'Saúde', color: 'hsl(var(--chart-4))' }, // Green (Renamed from 'physical' to 'Saúde' for consistency)
-  { id: 'community', name: 'Comunitário', color: 'hsl(var(--chart-5))' }, // Purple
+  { id: 'career', name: 'Carreira', color: 'hsl(var(--chart-1))' },
+  { id: 'social', name: 'Social', color: 'hsl(var(--chart-2))' },
+  { id: 'financial', name: 'Financeiro', color: 'hsl(var(--chart-3))' },
+  { id: 'physical', name: 'Saúde', color: 'hsl(var(--chart-4))' },
+  { id: 'community', name: 'Comunitário', color: 'hsl(var(--chart-5))' },
 ];
 
 // Define Items based on the requested visual clockwise order starting from the top
 export const wellbeingItems: WellbeingItem[] = [
-  // Order based on user request for visual representation on the chart
-  // Starting roughly at 12 o'clock and going clockwise
   { id: 'trabalho', name: 'Trabalho', categoryId: 'career', description: 'Satisfação com sua ocupação principal e ambiente de trabalho.' },
   { id: 'desenvolvimento', name: 'Desenvolvimento Intelectual', categoryId: 'career', description: 'Aprendizado contínuo e crescimento de habilidades.' },
   { id: 'realizacao', name: 'Realização e Propósito', categoryId: 'career', description: 'Sentimento de significado e contribuição através do seu trabalho ou vocação.' },
@@ -101,3 +99,4 @@ export const getCategoryForItem = (itemId: string): WellbeingCategory | undefine
 export const getItemDetails = (itemId: string): WellbeingItem | undefined => {
     return wellbeingItems.find(i => i.id === itemId);
 };
+
