@@ -17,8 +17,6 @@ import { initialItemScores, wellbeingCategories, wellbeingItems, getCategoryForI
 import { useToast } from "@/hooks/use-toast";
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { httpsCallable } from 'firebase/functions';
-import { functions } from '@/lib/firebase';
 
 interface CategoryScore {
   categoryId: string;
@@ -407,11 +405,41 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
 
-    // Temporarily disable Firebase Cloud Function call and show a different message
     toast({
-      title: "Enviando cópia dos resultados para análise.",
-      description: "Os dados serão salvos quando o app for publicado.",
-    });
+        title: "Enviando cópia dos resultados para análise.",
+        description: "Os dados também serão salvos para sua consulta.",
+      });
+
+    // Save data to Vercel's Serverless Function (our new API)
+    try {
+      const response = await fetch('/api/saveAssessmentData', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(assessmentData),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to save data to the server.');
+      }
+      
+      toast({
+        title: "Dados Salvos",
+        description: "Seus dados de avaliação foram salvos com sucesso.",
+      });
+
+    } catch (error) {
+      console.error("Error saving assessment data via API:", error);
+      toast({
+        title: "Erro ao Salvar Dados",
+        description: "Não foi possível salvar os dados da sua avaliação. Por favor, tente novamente.",
+        variant: "destructive",
+      });
+      // We don't block the user from proceeding even if server-side save fails
+    }
   
     // EmailJS sending logic
     const serviceId = "service_jmkr2dn";
@@ -433,7 +461,6 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
       assessment_summary_block: assessmentSummary,
       assessment_details_block: actionPlan,
       assessment_tags: '#wellbeing #assessment #pontosfortes',
-      // The destination email is configured in the EmailJS template
     };
   
     try {
@@ -445,13 +472,12 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
     } catch (error) {
       console.error("EmailJS error:", error);
       toast({
-        title: "Erro no Envio",
+        title: "Erro no Envio do Email",
         description: "Não foi possível enviar o relatório por email. Por favor, tente novamente.",
         variant: "destructive",
       });
     }
   
-    // Proceed to summary page regardless of email success
     goToStage('summary');
   }, [validateAssessmentCompletion, goToStage, toast, assessmentData, formatAssessmentResults, formatActionPlan]);
   

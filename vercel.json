@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/saveAssessmentData",
+      "destination": "/api/saveAssessmentData"
+    }
+  ]
+}
