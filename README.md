@@ -1,6 +1,3 @@
-# Firebase Studio
+# Wellbeing Compass
 
-This is a NextJS starter in Firebase Studio.
-
-To get started, take a look at src/app/page.tsx.
-# wellbeingcompass
+This is a Next.js application built with Firebase Studio that allows users to perform a self-assessment of their wellbeing across different life areas.
