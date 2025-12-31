@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { createContext, useContext, useState, ReactNode, useCallback, Dispatch, SetStateAction } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useCallback, Dispatch, SetStateAction, useEffect } from 'react';
 import type {
   AssessmentData,
   UserInfo,
@@ -70,6 +70,34 @@ const initialAssessmentState: AssessmentData = {
 export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
   const { toast } = useToast();
   const [assessmentData, setAssessmentData] = useState<AssessmentData>(initialAssessmentState);
+  const [lastAction, setLastAction] = useState<{ type: string, payload?: any } | null>(null);
+
+  useEffect(() => {
+    if (!lastAction) return;
+
+    switch (lastAction.type) {
+      case 'ITEM_SELECTED':
+        toast({ title: `"${lastAction.payload.itemName}" selecionado para melhoria.` });
+        break;
+      case 'SELECTION_LIMIT':
+        toast({ title: "Limite Atingido", description: "Você já selecionou 3 itens para melhorar.", variant: "destructive" });
+        break;
+      case 'ITEM_REMOVED':
+        toast({ title: `"${lastAction.payload.itemName}" removido da seleção.` });
+        break;
+      case 'ACTION_REMOVED':
+        toast({ title: "Ação Removida", description: "A ação selecionada foi removida." });
+        break;
+      case 'ACTION_CLEARED':
+         toast({ title: "Ação Limpa", description: "O conteúdo da ação foi limpo." });
+        break;
+      case 'ACTION_ADDED':
+        toast({ title: "Ação Adicionada", description: "Um novo campo de ação foi adicionado." });
+        break;
+    }
+    setLastAction(null); // Reset after showing toast
+  }, [lastAction, toast]);
+
 
   const updateUserInfo = useCallback((info: UserInfo) => {
     setAssessmentData(prev => ({ ...prev, userInfo: info, stage: 'currentScore' }));
@@ -91,7 +119,7 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
          return prev;
       }
       if (prev.improvementItems.length >= 3) {
-         toast({ title: "Limite Atingido", description: "Você já selecionou 3 itens para melhorar.", variant: "destructive" });
+         setLastAction({ type: 'SELECTION_LIMIT' });
          return prev;
       }
       const newItem: ImprovementItem = {
@@ -99,20 +127,20 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
         actions: [ { id: generateActionId(itemId, 0), text: '', completionDate: null } ],
       };
       const itemName = getItemDetails(itemId)?.name ?? 'Item';
-      toast({ title: `"${itemName}" selecionado para melhoria.` });
+      setLastAction({ type: 'ITEM_SELECTED', payload: { itemName } });
       return {
         ...prev,
         improvementItems: [...prev.improvementItems, newItem],
       };
     });
- }, [toast]);
+ }, []);
 
   const removeImprovementItem = useCallback((itemId: string) => {
      setAssessmentData(prev => {
         const exists = prev.improvementItems.some(ii => ii.itemId === itemId);
         if (exists) {
             const itemName = getItemDetails(itemId)?.name ?? 'Item';
-            toast({ title: `"${itemName}" removido da seleção.` });
+            setLastAction({ type: 'ITEM_REMOVED', payload: { itemName } });
             return {
                 ...prev,
                 improvementItems: prev.improvementItems.filter(ii => ii.itemId !== itemId),
@@ -120,7 +148,7 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
         }
         return prev;
      });
-  }, [toast]);
+  }, []);
 
   const isItemSelectedForImprovement = useCallback((itemId: string): boolean => {
     return assessmentData.improvementItems.some(ii => ii.itemId === itemId);
@@ -184,13 +212,13 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
         });
 
         if (actionWasActuallyRemoved) {
-            toast({ title: "Ação Removida", description: "A ação selecionada foi removida." });
+            setLastAction({ type: 'ACTION_REMOVED' });
         } else {
-            toast({ title: "Ação Limpa", description: "O conteúdo da ação foi limpo." });
+            setLastAction({ type: 'ACTION_CLEARED' });
         }
         return { ...prev, improvementItems: newImprovementItems };
       });
-  }, [toast]);
+  }, []);
 
 
   const addActionItemSlot = useCallback((itemId: string) => {
@@ -212,8 +240,8 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
               return ii;
           }),
       }));
-      toast({ title: "Ação Adicionada", description: "Um novo campo de ação foi adicionado." });
-  }, [toast]);
+      setLastAction({ type: 'ACTION_ADDED' });
+  }, []);
 
 
 
