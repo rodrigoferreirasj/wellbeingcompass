@@ -40,6 +40,38 @@ export const UserInfoForm: React.FC = () => {
     updateUserInfo(data);
     // Context handles stage transition
   };
+  
+    const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        let value = e.target.value;
+        // Handle international numbers separately
+        if (value.startsWith('+')) {
+            value = '+' + value.substring(1).replace(/\D/g, '');
+        } else {
+            value = value.replace(/\D/g, '');
+            if (value.length > 2) {
+                value = `(${value.substring(0, 2)}) ${value.substring(2)}`;
+            } else if (value.length > 0) {
+                 value = `(${value}`;
+            }
+
+            if (value.length > 9 && value.length <= 14) { // Landline or old cell
+                 if (value.length > 9 && value.includes(' ')) {
+                    const parts = value.split(' ');
+                    if (parts[1].length > 4) {
+                       parts[1] = `${parts[1].substring(0, 4)}-${parts[1].substring(4)}`;
+                       value = parts.join(' ');
+                    }
+                 }
+            } else if (value.length > 14) { // New cell format
+                 const parts = value.split(' ');
+                 if (parts[1] && parts[1].length > 5) {
+                    parts[1] = `${parts[1].substring(0, 5)}-${parts[1].substring(5,9)}`;
+                    value = parts.join(' ');
+                 }
+            }
+        }
+        form.setValue('phone', value);
+    };
 
 
   return (
@@ -117,7 +149,13 @@ export const UserInfoForm: React.FC = () => {
                 <FormItem>
                   <FormLabel>Telefone</FormLabel>
                   <FormControl>
-                    <Input type="tel" placeholder="(XX) XXXXX-XXXX" {...field} />
+                    <Input 
+                        type="tel" 
+                        placeholder="(XX) XXXXX-XXXX" 
+                        {...field} 
+                        onChange={handlePhoneChange}
+                        maxLength={16} // To accomodate for (XX) XXXXX-XXXX and a space
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
