@@ -74,11 +74,11 @@ export const WellbeingWheel: React.FC<WellbeingWheelProps> = ({ scoreType, onNex
   let prevStage: AssessmentStage;
 
   if (scoreType === 'current') {
-    nextStage = 'payment'; // currentScore now goes to payment
+    nextStage = 'desiredScore';
     prevStage = 'userInfo';
   } else if (scoreType === 'desired') {
     nextStage = 'selectItems';
-    prevStage = 'payment'; // desiredScore now comes from payment
+    prevStage = 'currentScore';
   } else { // scoreType === 'select'
     nextStage = 'defineActions';
     prevStage = 'desiredScore';

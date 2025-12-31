@@ -344,9 +344,7 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
     if (!allCurrentScored) {
         return { valid: false, message: "Avalie todos os itens no estágio 'Atual'.", stage: 'currentScore' as AssessmentStage };
     }
-    // For payment stage, we don't block submission here, but assume if they reach 'desiredScore', payment was handled.
-    // Real payment status check would go here if we had one.
-
+    
     const allDesiredScored = assessmentData.itemScores.every(s => s.desiredScore !== null);
     if (!allDesiredScored) {
         return { valid: false, message: "Defina notas desejadas para todos os itens.", stage: 'desiredScore' as AssessmentStage };

@@ -38,7 +38,7 @@ export interface ImprovementItem {
 }
 
 // Stages might need adjustment based on new flow
-export type AssessmentStage = 'userInfo' | 'currentScore' | 'payment' | 'desiredScore' | 'selectItems' | 'defineActions' | 'summary';
+export type AssessmentStage = 'userInfo' | 'currentScore' | 'desiredScore' | 'selectItems' | 'defineActions' | 'summary';
 
 export interface AssessmentData {
   userInfo: UserInfo | null;
@@ -99,4 +99,3 @@ export const getCategoryForItem = (itemId: string): WellbeingCategory | undefine
 export const getItemDetails = (itemId: string): WellbeingItem | undefined => {
     return wellbeingItems.find(i => i.id === itemId);
 };
-

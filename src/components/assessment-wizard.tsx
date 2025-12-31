@@ -8,7 +8,6 @@ import { UserInfoForm } from './user-info-form';
 import { WellbeingWheel } from './wellbeing-wheel';
 import { ActionPlan } from './action-plan';
 import { SummaryDisplay } from './summary-display';
-import { PaymentPage } from './payment-page'; // Import the new PaymentPage
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button'; // Import Button
@@ -16,7 +15,7 @@ import { Calendar } from 'lucide-react'; // Import icon if needed
 import * as htmlToImage from 'html-to-image';
 
 export const AssessmentWizard: React.FC = () => {
-  const { assessmentData, goToStage, submitAssessment } = useAssessment(); // Added submitAssessment
+  const { assessmentData, goToStage } = useAssessment();
   const { stage } = assessmentData;
   const componentRef = useRef<HTMLDivElement>(null);
 
@@ -40,7 +39,6 @@ export const AssessmentWizard: React.FC = () => {
     // Determine next stage logic from context or specific components
     // For most stages, the next stage is determined within the component itself (e.g., WellbeingWheel, ActionPlan)
     // For UserInfoForm, it's handled in its onSubmit
-    // For PaymentPage, it will handle its own transition
     if (stage === 'userInfo') goToStage('currentScore'); // Example, actual logic might be in UserInfoForm
     // If on summary, submitAssessment handles it (though there's no 'Next' from summary)
     else if (stage === 'summary') {
@@ -54,7 +52,6 @@ export const AssessmentWizard: React.FC = () => {
   const stageComponents: { [key in typeof stage]: React.ReactNode } = {
     userInfo: <UserInfoForm />,
     currentScore: <WellbeingWheel scoreType="current" onNext={handleNextStageWithDownload} />,
-    payment: <PaymentPage onNext={handleNextStageWithDownload} />, // Add PaymentPage
     desiredScore: <WellbeingWheel scoreType="desired" onNext={handleNextStageWithDownload} />,
     selectItems: <WellbeingWheel scoreType="select" onNext={handleNextStageWithDownload} />,
     defineActions: <ActionPlan renderAllSelected={true} />, // ActionPlan handles its own "Concluir" which calls submitAssessment
@@ -64,7 +61,6 @@ export const AssessmentWizard: React.FC = () => {
   const stageTitles: { [key in typeof stage]: string } = {
     userInfo: 'Informações Pessoais',
     currentScore: 'Avalie seu Bem-Estar Atual (por Item)',
-    payment: 'Acesso Premium', // New title for payment stage
     desiredScore: 'Defina seu Bem-Estar Desejado (por Item)',
     selectItems: 'Selecione Itens para Melhorar',
     defineActions: 'Defina seu Plano de Ação',
@@ -74,7 +70,6 @@ export const AssessmentWizard: React.FC = () => {
    const stageDescriptions: { [key in typeof stage]: string } = {
     userInfo: 'Por favor, preencha suas informações para começar.',
     currentScore: `Clique em cada item da Roda do Bem-Estar para dar uma nota de 1 a 10 para sua satisfação atual. Veja os percentuais por categoria abaixo.`,
-    payment: 'Para continuar com a avaliação, defina suas metas e crie seu plano de ação, é necessário realizar o pagamento.', // New description
     desiredScore: `Agora, clique novamente em cada item para indicar a nota que você deseja alcançar (1 a 10). Veja a nota atual para referência e os percentuais desejados abaixo.`,
     selectItems: `Selecione até 3 itens para melhorar clicando no gráfico. Clique em "Próximo" para definir as ações.`,
     defineActions: 'Para cada item selecionado, defina pelo menos uma ação com descrição e data de conclusão.',
@@ -83,11 +78,10 @@ export const AssessmentWizard: React.FC = () => {
 
   const stageProgress: { [key in typeof stage]: number } = {
     userInfo: 0,
-    currentScore: 17,
-    payment: 25, // Progress for payment stage
-    desiredScore: 34,
-    selectItems: 51,
-    defineActions: 68,
+    currentScore: 20,
+    desiredScore: 40,
+    selectItems: 60,
+    defineActions: 80,
     summary: 100,
   };
 
