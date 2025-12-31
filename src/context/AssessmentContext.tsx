@@ -69,8 +69,8 @@ const initialAssessmentState: AssessmentData = {
 
 
 export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
-  const { toast } = useToast();
   const [assessmentData, setAssessmentData] = useState<AssessmentData>(initialAssessmentState);
+  const { toast } = useToast();
   const [lastAction, setLastAction] = useState<{ type: string, payload?: any } | null>(null);
 
   useEffect(() => {
@@ -406,6 +406,12 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
       }
       return;
     }
+
+    // Temporarily disable Firebase Cloud Function call and show a different message
+    toast({
+      title: "Enviando cópia dos resultados para análise.",
+      description: "Os dados serão salvos quando o app for publicado.",
+    });
   
     // EmailJS sending logic
     const serviceId = "service_jmkr2dn";
@@ -493,3 +499,5 @@ export const useAssessment = () => {
   }
   return context;
 };
+
+    
