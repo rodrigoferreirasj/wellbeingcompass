@@ -2,6 +2,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useCallback, Dispatch, SetStateAction, useEffect } from 'react';
+import emailjs from '@emailjs/browser';
 import type {
   AssessmentData,
   UserInfo,
@@ -392,59 +393,62 @@ export const AssessmentProvider = ({ children }: { children: ReactNode }) => {
 
 
   const submitAssessment = useCallback(async () => {
-     const validation = validateAssessmentCompletion();
-     if (!validation.valid) {
-        toast({
-            title: "Informações Incompletas",
-            description: validation.message,
-            variant: "destructive",
-            duration: 7000,
-        });
-        if (validation.stage) {
-            goToStage(validation.stage);
-        }
-        return;
-     }
-
-     console.log("Saving to Firebase is disabled. Proceeding to summary.");
-     toast({
-         title: "Finalizado (Salvamento Desativado)",
-         description: "Os dados não serão salvos no momento.",
-     });
-     goToStage('summary');
-
-     /*
-     try {
-       const saveAssessmentDataFunction = httpsCallable(functions, 'saveAssessmentData');
-        const dataToSend = {
-           ...assessmentData,
-           stage: undefined,
-            improvementItems: assessmentData.improvementItems.map(item => ({
-                ...item,
-                actions: item.actions.map(action => ({
-                ...action,
-                completionDate: action.completionDate ? action.completionDate : null,
-                }))
-            })),
-        };
-       const result = await saveAssessmentDataFunction(dataToSend);
-       console.log('Assessment data saved successfully:', result.data);
-       toast({
-           title: "Avaliação Salva",
-           description: "Seus dados foram salvos com sucesso.",
-       });
-       goToStage('summary');
-     } catch (error: any) {
-       console.error("Error saving assessment data via Cloud Function:", error);
-       toast({
-           title: "Erro ao Salvar",
-           description: `Não foi possível salvar seus dados: ${error.message}. Por favor, tente novamente.`,
-           variant: "destructive",
-       });
-     }
-     */
-
-  }, [validateAssessmentCompletion, goToStage, toast, assessmentData]);
+    const validation = validateAssessmentCompletion();
+    if (!validation.valid) {
+      toast({
+        title: "Informações Incompletas",
+        description: validation.message,
+        variant: "destructive",
+        duration: 7000,
+      });
+      if (validation.stage) {
+        goToStage(validation.stage);
+      }
+      return;
+    }
+  
+    // EmailJS sending logic
+    const serviceId = "service_jmkr2dn";
+    const templateId = "assessment_template";
+    const publicKey = "dh8MnuS1CHuhkCk4X";
+  
+    const assessmentSummary = formatAssessmentResults();
+    const actionPlan = formatActionPlan();
+  
+    const templateParams = {
+      user_origem: 'Wellbeing Compass App',
+      user_name: assessmentData.userInfo?.fullName,
+      user_position: assessmentData.userInfo?.jobTitle,
+      user_company: assessmentData.userInfo?.company,
+      user_email: assessmentData.userInfo?.email,
+      user_whatsapp: assessmentData.userInfo?.phone,
+      assessment_name: 'Wellbeing Compass',
+      timestamp: format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }),
+      assessment_summary_block: assessmentSummary,
+      assessment_details_block: actionPlan,
+      assessment_tags: '#wellbeing #assessment #pontosfortes',
+      // The destination email is configured in the EmailJS template
+    };
+  
+    try {
+      await emailjs.send(serviceId, templateId, templateParams, publicKey);
+      toast({
+        title: "Relatório Enviado",
+        description: "O resumo da sua avaliação foi enviado com sucesso.",
+      });
+    } catch (error) {
+      console.error("EmailJS error:", error);
+      toast({
+        title: "Erro no Envio",
+        description: "Não foi possível enviar o relatório por email. Por favor, tente novamente.",
+        variant: "destructive",
+      });
+    }
+  
+    // Proceed to summary page regardless of email success
+    goToStage('summary');
+  }, [validateAssessmentCompletion, goToStage, toast, assessmentData, formatAssessmentResults, formatActionPlan]);
+  
 
   const resetAssessment = useCallback(() => {
     setAssessmentData({

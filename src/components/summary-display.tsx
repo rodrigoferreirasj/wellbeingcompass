@@ -8,7 +8,7 @@ import { wellbeingItems, wellbeingCategories, getItemDetails, getCategoryForItem
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { RotateCcw, TrendingUp, Calendar, Send, Printer } from 'lucide-react'; // Send is no longer used
+import { RotateCcw, TrendingUp, Calendar, Printer } from 'lucide-react'; // Removed Send
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -17,7 +17,7 @@ import * as htmlToImage from 'html-to-image';
 
 
 export const SummaryDisplay: React.FC = () => {
-  const { assessmentData, resetAssessment, formatAssessmentResults, formatActionPlan } = useAssessment();
+  const { assessmentData, resetAssessment } = useAssessment();
   const { userInfo, itemScores, improvementItems } = assessmentData;
   const printRef = useRef<HTMLDivElement>(null);
   const [isClient, setIsClient] = useState(false);
@@ -50,8 +50,6 @@ export const SummaryDisplay: React.FC = () => {
      // Optionally navigate back to the start or reload
      // window.location.reload();
   };
-
-  // Removed handleSendResults function
 
 
   if (!isClient) {
@@ -177,13 +175,6 @@ export const SummaryDisplay: React.FC = () => {
                   Download dos resultados
                </Button>
              </div>
-             {/* Removed Send to coach button */}
-             {/*
-             <Button onClick={handleSendResults}>
-                 <Send className="mr-2 h-4 w-4" />
-                 Enviar Relatório para o Coach
-            </Button>
-             */}
         </CardFooter>
         </Card>
 
