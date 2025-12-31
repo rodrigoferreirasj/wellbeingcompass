@@ -44,6 +44,7 @@
     "firebase": "^11.3.0",
     "firebase-admin": "^12.1.0",
     "genkit": "^1.6.2",
+    "genkit-cli": "^1.6.1",
     "html-to-image": "^1.11.11",
     "lucide-react": "^0.475.0",
     "next": "15.2.8",
@@ -55,15 +56,14 @@
     "recharts": "^2.15.1",
     "tailwind-merge": "^3.0.1",
     "tailwindcss-animate": "^1.0.7",
+    "typescript": "^5",
     "zod": "^3.24.2"
   },
   "devDependencies": {
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
-    "genkit-cli": "^1.6.1",
     "postcss": "^8",
-    "tailwindcss": "^3.4.1",
-    "typescript": "^5"
+    "tailwindcss": "^3.4.1"
   }
 }
